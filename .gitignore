@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+# compiled single-file binary
+/uxd
+bun.lockb
