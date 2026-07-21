@@ -37,6 +37,8 @@ export interface FixtureOrigin {
   makePr(n: number, branch: string): void;
   /** Amend history on `branch` and force-push. Returns the new sha. */
   forcePush(branch: string, files: Record<string, string>): string;
+  /** Merge `from` into `into` in the origin (via the work clone). Returns the new sha. */
+  merge(into: string, from: string): string;
 }
 
 /** Build a bare origin repo plus a private work clone used to author commits. */
@@ -70,6 +72,12 @@ export function makeFixtureOrigin(tmp: string): FixtureOrigin {
     makePr: (n, branch) => {
       const sha = git(["-C", originPath, "rev-parse", `refs/heads/${branch}`]).trim();
       git(["-C", originPath, "update-ref", `refs/pull/${n}/head`, sha]);
+    },
+    merge: (into, from) => {
+      git(["-C", workPath, "checkout", into]);
+      git(["-C", workPath, "merge", "--no-ff", "-m", `Merge ${from} into ${into}`, from]);
+      git(["-C", workPath, "push", "origin", into]);
+      return git(["-C", workPath, "rev-parse", "HEAD"]).trim();
     },
   };
 }
