@@ -131,3 +131,18 @@ describe("§17.2 scenario 11 — lock contention", () => {
     expect(existsSync(join(env.worktreesPath("n8n"), "feature-z"))).toBe(true);
   });
 });
+
+describe("error contract (§14)", () => {
+  it("a ref absent on origin → E_RESOLVE (exit 4), not E_GIT", async () => {
+    const r = await env.run(["n8n", "definitely-no-such-branch", "checkout"]);
+    expect(r.code).toBe(4);
+    expect(r.stderr).toContain("error(E_RESOLVE)");
+    expect(r.stderr).toContain("does not exist on origin");
+  });
+
+  it("an absent PR ref on origin → E_RESOLVE (exit 4)", async () => {
+    const r = await env.run(["n8n", "999999", "checkout"]);
+    expect(r.code).toBe(4);
+    expect(r.stderr).toContain("error(E_RESOLVE)");
+  });
+});

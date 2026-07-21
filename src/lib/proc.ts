@@ -67,7 +67,7 @@ export interface PassthroughOptions {
 export async function passthrough(argv: string[], opts: PassthroughOptions = {}): Promise<number> {
   recorder?.(argv);
   if (opts.detach) {
-    const proc = Bun.spawn(argv, {
+    const proc = spawnOrThrow(argv, {
       cwd: opts.cwd,
       env: opts.env ?? (process.env as Record<string, string>),
       stdin: "ignore",
@@ -78,7 +78,7 @@ export async function passthrough(argv: string[], opts: PassthroughOptions = {})
     return 0;
   }
 
-  const proc = Bun.spawn(argv, {
+  const proc = spawnOrThrow(argv, {
     cwd: opts.cwd,
     env: opts.env ?? (process.env as Record<string, string>),
     stdin: "inherit",
@@ -113,4 +113,25 @@ export async function passthrough(argv: string[], opts: PassthroughOptions = {})
 const SIGNALS: Record<string, number> = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1, SIGKILL: 9, SIGQUIT: 3 };
 function signalNumber(sig: string): number {
   return SIGNALS[sig] ?? 0;
+}
+
+/**
+ * Spawn `argv`, mapping a missing-binary ENOENT to a clean E_SETUP instead of
+ * letting the raw spawn error surface as E_INTERNAL (§14). The binary being
+ * absent is an environment problem the user can fix, not an internal bug.
+ */
+function spawnOrThrow<T extends Parameters<typeof Bun.spawn>[1]>(
+  argv: string[],
+  options: T,
+): ReturnType<typeof Bun.spawn> {
+  try {
+    return Bun.spawn(argv, options);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+      throw new UxdError("E_SETUP", `command not found: ${argv[0]}`, {
+        hint: `ensure '${argv[0]}' is installed and on your PATH`,
+      });
+    }
+    throw e;
+  }
 }

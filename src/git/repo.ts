@@ -2,6 +2,7 @@
 
 import { existsSync } from "node:fs";
 import { capture } from "../lib/proc.ts";
+import { UxdError } from "../lib/errors.ts";
 import type { Logger } from "../lib/log.ts";
 
 export const MIN_GIT_VERSION = "2.38";
@@ -82,21 +83,35 @@ export async function detectDefaultBranch(g: GitEnv): Promise<string | undefined
 /** Fetch a branch's remote-tracking ref (§7.2). */
 export async function fetchBranch(g: GitEnv, name: string): Promise<void> {
   g.log.step(`fetching origin/${name}`);
-  await runGit(g, ["git", "-C", g.repoPath, "fetch", "origin", name, "--no-tags"]);
+  const res = await runGit(g, ["git", "-C", g.repoPath, "fetch", "origin", name, "--no-tags"], {
+    allowFailure: true,
+  });
+  if (res.code !== 0) throw classifyFetchError(res.stderr, `branch '${name}'`);
 }
 
 /** Force-fetch a PR head into a local `pr/<n>` branch (§7.2). */
 export async function fetchPr(g: GitEnv, n: number): Promise<void> {
   g.log.step(`fetching pull/${n} → pr/${n}`);
-  await runGit(g, [
-    "git",
-    "-C",
-    g.repoPath,
-    "fetch",
-    "origin",
-    `+refs/pull/${n}/head:refs/heads/pr/${n}`,
-    "--no-tags",
-  ]);
+  const res = await runGit(
+    g,
+    ["git", "-C", g.repoPath, "fetch", "origin", `+refs/pull/${n}/head:refs/heads/pr/${n}`, "--no-tags"],
+    { allowFailure: true },
+  );
+  if (res.code !== 0) throw classifyFetchError(res.stderr, `PR #${n}`);
+}
+
+/**
+ * A failed fetch is E_RESOLVE (exit 4) when the ref simply isn't on origin, and
+ * E_GIT (exit 5) for any other transport/plumbing failure (§14).
+ */
+function classifyFetchError(stderr: string, ref: string): UxdError {
+  const detail = stderr.trim();
+  if (/couldn't find remote ref|no such ref|remote ref .* not found/i.test(detail)) {
+    return new UxdError("E_RESOLVE", `${ref} does not exist on origin`, {
+      hint: "check the name, or push the ref first",
+    });
+  }
+  return new UxdError("E_GIT", `git fetch failed for ${ref}: ${detail || "unknown error"}`);
 }
 
 /** Wire same-repo PR push-back so a plain `git push` targets the agent branch (§7.3). */
