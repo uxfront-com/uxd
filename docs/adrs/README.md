@@ -7,4 +7,5 @@ never edit an accepted ADR's substance.
 
 | # | Title | Date | Status | Tags |
 |---|---|---|---|---|
-| [001](001-hand-rolled-cli-parsing-and-frozen-dependency-budget.md) | Hand-rolled CLI parsing and a frozen three-package dependency budget | 2026-07-21 | Accepted | cli, dependencies, parsing |
+| [001](001-hand-rolled-cli-parsing-and-frozen-dependency-budget.md) | Hand-rolled CLI parsing and a frozen three-package dependency budget | 2026-07-21 | Accepted (dependency budget amended by 002) | cli, dependencies, parsing |
+| [002](002-node-runtime-compiled-ts-to-js.md) | Run on stock Node via a compiled TS→JS bin; Bun runtime dropped | 2026-07-22 | Accepted | runtime, node, packaging, build |
