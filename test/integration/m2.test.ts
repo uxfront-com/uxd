@@ -214,6 +214,23 @@ describe("§8.1 PR re-fetch into a checked-out branch", () => {
   });
 });
 
+describe("§9.12 config add alias", () => {
+  it("`config add` resolves identically to `config edit`", async () => {
+    const add = await env.run(["--dry-run", "config", "add", "n8n"]);
+    const edit = await env.run(["--dry-run", "config", "edit", "n8n"]);
+    expect(add.code).toBe(0);
+    expect(add.stdout.trim().length).toBeGreaterThan(0);
+    expect(add.stdout).toContain("n8n.toml");
+    expect(add.stdout).toBe(edit.stdout); // same editor launch argv
+  });
+
+  it("an unknown subcommand still lists add in the hint", async () => {
+    const r = await env.run(["config", "frobnicate"]);
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain("path | edit | add | validate");
+  });
+});
+
 describe("§9.9 clean --prune-state", () => {
   it("removes state entries whose worktree directory is gone", async () => {
     const co = await env.run(["n8n", "feature-x", "checkout"]);
