@@ -63,10 +63,10 @@ Then confirm the tool's global bin directory is on your `PATH` — `~/.bun/bin` 
 Skip the global step and call the entrypoint from the clone:
 
 ```bash
-bun run bin/uxd version    # → uxd 0.0.0
+bun run bin/uxd.ts version    # → uxd 0.0.0
 ```
 
-The examples below use `uxd`; substitute `bun run bin/uxd` if you have not installed it globally.
+The examples below use `uxd`; substitute `bun run bin/uxd.ts` if you have not installed it globally.
 
 ## Quick start
 
@@ -482,7 +482,7 @@ Errors print as `error(E_CODE): message` on stderr, with a `hint:` line when one
 bun install
 bun test            # unit + integration
 bun run typecheck   # tsc --noEmit
-bun run bin/uxd help
+bun run bin/uxd.ts help
 ```
 
 `DESIGN.md` is the source of truth for behavior and scope. See `docs/adrs/` for architecture decision records.
