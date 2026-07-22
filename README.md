@@ -24,49 +24,52 @@ resolve(ref) → materialize(workspace) → act(command)
 
 ## Requirements
 
-- [Bun](https://bun.sh) ≥ 1.1
+- [Node.js](https://nodejs.org) ≥ 18
 - `git` ≥ 2.38
 - `gh` (optional — enables PR metadata in `list`/`info`, `gh pr diff`, and fork push-back; every `gh` feature degrades gracefully when it is missing)
 
+`uxd` runs on stock Node — no Bun, Deno, or other runtime required. Any package manager (npm, pnpm, yarn) installs it.
+
 ## Install
 
-`uxd` runs on [Bun](https://bun.sh). Bun is the runtime even if you install dependencies with another package manager, so make sure it is on your `PATH` first.
+`uxd` ships as compiled JavaScript, so installing from a clone has two steps: install dependencies, then build the `dist/` output that the CLI runs from.
 
 ### Global install (recommended)
 
-Clone the repo and link it onto your `PATH` with Bun:
+Clone the repo, build, and link it onto your `PATH`:
 
 ```bash
-git clone git@github.com:alexgrozav/uxd.git
+git clone git@github.com:uxfront-com/uxd.git
 cd uxd
-bun install
-bun link                # puts `uxd` on your PATH (~/.bun/bin)
+npm install
+npm run build           # emits dist/bin/uxd.js (the linked bin points here)
+npm link                # puts `uxd` on your PATH
 uxd version             # → uxd 0.0.0
 ```
 
-`bun link` points `uxd` at your clone, so a later `git pull` updates the CLI in place.
+`npm link` points `uxd` at your clone's `dist/`. Because the CLI runs compiled output, **re-run `npm run build` after a `git pull`** to pick up new changes.
 
 ### Other package managers
 
-Prefer npm, pnpm, or yarn? Use it to install dependencies, then expose the CLI with that tool's global-link command — Bun still runs `uxd`:
+Prefer pnpm or yarn? Install and build the same way, then use that tool's global-link command:
 
 ```bash
-npm install  && npm link                       # npm
-pnpm install && pnpm link --global             # pnpm (run `pnpm setup` once first)
-yarn install && yarn global add "file:$PWD"    # yarn (classic)
+pnpm install && pnpm run build && pnpm link --global    # pnpm (run `pnpm setup` once first)
+yarn install && yarn run build && yarn global add "file:$PWD"   # yarn (classic)
 ```
 
-Then confirm the tool's global bin directory is on your `PATH` — `~/.bun/bin` (bun), `$(npm prefix -g)/bin` (npm), `$(pnpm bin -g)` (pnpm), or `$(yarn global bin)` (yarn) — and run `uxd version`.
+Then confirm the tool's global bin directory is on your `PATH` — `$(npm prefix -g)/bin` (npm), `$(pnpm bin -g)` (pnpm), or `$(yarn global bin)` (yarn) — and run `uxd version`.
 
 ### Run without installing
 
-Skip the global step and call the entrypoint from the clone:
+Skip the global step and call the built entrypoint from the clone:
 
 ```bash
-bun run bin/uxd.ts version    # → uxd 0.0.0
+npm install && npm run build
+node dist/bin/uxd.js version    # → uxd 0.0.0
 ```
 
-The examples below use `uxd`; substitute `bun run bin/uxd.ts` if you have not installed it globally.
+The examples below use `uxd`; substitute `node dist/bin/uxd.js` if you have not linked it globally.
 
 ## Quick start
 
@@ -479,10 +482,11 @@ Errors print as `error(E_CODE): message` on stderr, with a `hint:` line when one
 ## Development
 
 ```bash
-bun install
-bun test            # unit + integration
-bun run typecheck   # tsc --noEmit
-bun run bin/uxd.ts help
+npm install
+npm test                       # unit + integration (vitest)
+npm run typecheck              # tsc --noEmit
+npm run build                  # emit dist/
+node dist/bin/uxd.js help      # run the built CLI
 ```
 
 `DESIGN.md` is the source of truth for behavior and scope. See `docs/adrs/` for architecture decision records.
