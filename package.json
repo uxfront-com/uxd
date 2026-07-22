@@ -4,7 +4,7 @@
   "description": "Materialize any git ref of a configured project into an isolated, runnable local workspace.",
   "type": "module",
   "bin": {
-    "uxd": "./bin/uxd"
+    "uxd": "./bin/uxd.ts"
   },
   "files": [
     "bin",
@@ -16,7 +16,7 @@
     "dev": "bun run src/main.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "compile": "bun build ./bin/uxd --compile --outfile uxd"
+    "compile": "bun build ./bin/uxd.ts --compile --outfile uxd"
   },
   "engines": {
     "bun": ">=1.1.0"
