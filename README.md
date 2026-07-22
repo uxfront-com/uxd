@@ -30,30 +30,52 @@ resolve(ref) → materialize(workspace) → act(command)
 
 ## Install
 
-Clone the repo and run it with Bun:
+`uxd` runs on [Bun](https://bun.sh). Bun is the runtime even if you install dependencies with another package manager, so make sure it is on your `PATH` first.
+
+### Global install (recommended)
+
+Clone the repo and link it onto your `PATH` with Bun:
 
 ```bash
 git clone git@github.com:alexgrozav/uxd.git
 cd uxd
 bun install
-bin/uxd version        # → uxd 0.0.0
+bun link                # puts `uxd` on your PATH (~/.bun/bin)
+uxd version             # → uxd 0.0.0
 ```
 
-To get a `uxd` on your `PATH`, either symlink `bin/uxd`, or compile a standalone binary:
+`bun link` points `uxd` at your clone, so a later `git pull` updates the CLI in place.
+
+### Other package managers
+
+Prefer npm, pnpm, or yarn? Use it to install dependencies, then expose the CLI with that tool's global-link command — Bun still runs `uxd`:
 
 ```bash
-bun run compile        # produces ./uxd
+npm install  && npm link                       # npm
+pnpm install && pnpm link --global             # pnpm (run `pnpm setup` once first)
+yarn install && yarn global add "file:$PWD"    # yarn (classic)
 ```
 
-The examples below use `uxd`; substitute `bin/uxd` (or `bun run bin/uxd`) if you have not installed it globally.
+Then confirm the tool's global bin directory is on your `PATH` — `~/.bun/bin` (bun), `$(npm prefix -g)/bin` (npm), `$(pnpm bin -g)` (pnpm), or `$(yarn global bin)` (yarn) — and run `uxd version`.
+
+### Run without installing
+
+Skip the global step and call the entrypoint from the clone:
+
+```bash
+bun run bin/uxd version    # → uxd 0.0.0
+```
+
+The examples below use `uxd`; substitute `bun run bin/uxd` if you have not installed it globally.
 
 ## Quick start
 
-1. Point `uxd` at a project. Config files live in `${XDG_CONFIG_HOME:-~/.config}/uxd`:
+1. Point `uxd` at a project. By default `uxd` reads its config from `${XDG_CONFIG_HOME:-~/.config}/uxd`; set `UXD_CONFIG_DIR` to keep everything under `~/.uxd`:
 
    ```bash
-   uxd config path                    # print the config dir
-   uxd config edit my-project         # open (or create) my-project.toml
+   export UXD_CONFIG_DIR=~/.uxd        # add to your shell profile to persist
+   uxd config path                     # → ~/.uxd
+   uxd config edit my-project          # open (or create) ~/.uxd/my-project.toml
    ```
 
    A minimal `my-project.toml`:
@@ -460,7 +482,7 @@ Errors print as `error(E_CODE): message` on stderr, with a `hint:` line when one
 bun install
 bun test            # unit + integration
 bun run typecheck   # tsc --noEmit
-bin/uxd help
+bun run bin/uxd help
 ```
 
 `DESIGN.md` is the source of truth for behavior and scope. See `docs/adrs/` for architecture decision records.
