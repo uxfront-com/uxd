@@ -28,16 +28,18 @@ export async function diff(input: WorkspaceInput): Promise<number> {
   }
 
   // PR workspace + gh → let gh render against the real PR base (§9.7). `--tool`
-  // wants a local difftool, so it always takes the git path below.
-  if (ws.kind === "pr" && ws.number !== undefined && !tool && (await ctx.gh.available())) {
+  // wants a local difftool. `--stat` and any `-- <passthrough>` (e.g.
+  // `--color-words`) are git-diff flags that `gh pr diff` rejects, so those also
+  // force the local git path below. Plain `diff` on a PR still uses gh.
+  const gitOnlyArgs = stat || extra.length > 0;
+  if (ws.kind === "pr" && ws.number !== undefined && !tool && !gitOnlyArgs && (await ctx.gh.available())) {
     const repo = ghRepoSlug(project.repo);
     if (repo) {
-      const args = [...(stat ? ["--stat"] : []), ...extra];
       if (ctx.flags.dryRun) {
-        process.stdout.write(shellJoin(["gh", "pr", "diff", String(ws.number), "--repo", repo, ...args]) + "\n");
+        process.stdout.write(shellJoin(["gh", "pr", "diff", String(ws.number), "--repo", repo]) + "\n");
         return ExitCode.SUCCESS;
       }
-      return ctx.gh.prDiff(repo, ws.number, args);
+      return ctx.gh.prDiff(repo, ws.number, []);
     }
   }
 
