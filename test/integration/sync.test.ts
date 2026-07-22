@@ -1,7 +1,8 @@
 // §17.2 scenario 4 — sync after force-push: hard reset, dirty → exit 5,
 // --stash keeps changes, --fresh recreates.
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -26,7 +27,7 @@ afterEach(() => {
 });
 
 function gitOut(dir: string, args: string[]): string {
-  const res = Bun.spawnSync(["git", "-C", dir, ...args], { stdout: "pipe", stderr: "pipe" });
+  const res = spawnSync("git", ["-C", dir, ...args]);
   return res.stdout.toString();
 }
 

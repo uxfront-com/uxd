@@ -1,6 +1,7 @@
 // §17.2 scenarios 7 & 8 — clean --merged (git-only) and adopted path refs.
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -30,11 +31,11 @@ function state(): { workspaces: Record<string, { slug: string; adopted?: boolean
 }
 
 function branchExists(name: string): boolean {
-  const res = Bun.spawnSync(
-    ["git", "-C", env.repoPath("n8n"), "rev-parse", "--verify", `refs/heads/${name}`],
-    { stdout: "pipe", stderr: "pipe" },
+  const res = spawnSync(
+    "git",
+    ["-C", env.repoPath("n8n"), "rev-parse", "--verify", `refs/heads/${name}`],
   );
-  return res.exitCode === 0;
+  return res.status === 0;
 }
 
 describe("§17.2 scenario 7 — clean --merged", () => {
@@ -76,10 +77,7 @@ describe("§17.2 scenario 8 — adopted path ref", () => {
     const adopted = join(tmp, "external");
     mkdirSync(adopted, { recursive: true });
     const g = (args: string[]) =>
-      Bun.spawnSync(["git", "-C", adopted, "-c", "user.email=t@t.local", "-c", "user.name=t", ...args], {
-        stdout: "pipe",
-        stderr: "pipe",
-      });
+      spawnSync("git", ["-C", adopted, "-c", "user.email=t@t.local", "-c", "user.name=t", ...args]);
     g(["init", "-b", "main"]);
     writeFileSync(join(adopted, "a.txt"), "x\n");
     g(["add", "-A"]);

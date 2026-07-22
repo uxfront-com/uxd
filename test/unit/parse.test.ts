@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { parse, type ParseDeps } from "../../src/cli/parse.ts";
 import { parseUrlInput } from "../../src/core/resolve.ts";
 

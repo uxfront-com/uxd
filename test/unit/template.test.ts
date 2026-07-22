@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { interpolate, workspaceVars } from "../../src/lib/template.ts";
 
 const vars = workspaceVars({

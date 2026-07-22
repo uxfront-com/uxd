@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { passthrough } from "../../src/lib/proc.ts";
 import { isUxdError, type UxdError } from "../../src/lib/errors.ts";
 

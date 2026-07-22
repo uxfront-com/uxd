@@ -9,6 +9,7 @@ import { isDirty } from "../git/worktree.ts";
 import { workspaceDiskBytes } from "../core/remove.ts";
 import { ghRepoSlug } from "../core/workspace.ts";
 import { pad } from "../lib/table.ts";
+import { promptLine } from "../lib/prompt.ts";
 import type { Ctx, ProjectConfig } from "../config/schema.ts";
 import type { ProjectInput, WorkspaceInput } from "./types.ts";
 import { slug as slugFor } from "../core/resolve.ts";
@@ -167,7 +168,7 @@ export async function pick(input: ProjectInput): Promise<number> {
     const label = ws.kind === "path" ? "(adopted)" : (ws.branch ?? "—");
     process.stderr.write(`  ${i + 1}) ${ws.slug}  ${label}\n`);
   });
-  const answer = prompt(`select a workspace [1-${rows.length}] (enter to cancel):`);
+  const answer = promptLine(`select a workspace [1-${rows.length}] (enter to cancel):`);
   if (answer === null || answer.trim() === "") {
     ctx.log.step("cancelled");
     return ExitCode.SUCCESS;

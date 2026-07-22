@@ -10,6 +10,7 @@ import { listProjectNames, loadDefaults, loadProject, ConfigValidationError } fr
 import { loadState } from "../core/state.ts";
 import { presetBinary, isPreset } from "../core/editor.ts";
 import { isWorkspaceVerb } from "../cli/verbs.ts";
+import { which } from "../lib/which.ts";
 import type { TopInput } from "./types.ts";
 
 type Status = "ok" | "warn" | "fail";
@@ -155,7 +156,7 @@ async function checkProject(
   // editor binary on PATH (presets only; custom templates are opaque)
   if (isPreset(project.editor)) {
     const bin = presetBinary(project.editor);
-    const found = bin ? Bun.which(bin) : null;
+    const found = bin ? which(bin) : null;
     checks.push({
       name: `project ${name}: editor`,
       status: found ? "ok" : "warn",

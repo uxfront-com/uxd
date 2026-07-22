@@ -10,6 +10,7 @@ import { isDirty, mergedBranches } from "../git/worktree.ts";
 import { fetchBranch, type GitEnv } from "../git/repo.ts";
 import { ghRepoSlug } from "../core/workspace.ts";
 import { slug as slugFor } from "../core/resolve.ts";
+import { promptLine } from "../lib/prompt.ts";
 import type { ProjectInput, WorkspaceInput } from "./types.ts";
 import type { Ctx, ProjectConfig } from "../config/schema.ts";
 
@@ -55,7 +56,7 @@ function confirm(ctx: Ctx, count: number): boolean {
   if (!process.stdin.isTTY) {
     throw usage(`refusing to remove ${count} workspace(s) without confirmation`, "pass --yes for non-interactive use");
   }
-  const answer = prompt(`Remove ${count} workspace(s)? [y/N]`);
+  const answer = promptLine(`Remove ${count} workspace(s)? [y/N]`);
   return answer !== null && /^y(es)?$/i.test(answer.trim());
 }
 

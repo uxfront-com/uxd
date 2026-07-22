@@ -2,7 +2,8 @@
 // hint (§17.2 scenario 12), gh-driven list/diff/clean paths via a fake gh
 // client, and clean --prune-state (§9.9).
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -32,9 +33,7 @@ function state(): { workspaces: Record<string, { slug: string; kind: string; bra
 }
 
 function headSha(dir: string): string {
-  return Bun.spawnSync(["git", "-C", dir, "rev-parse", "HEAD"], { stdout: "pipe", stderr: "pipe" })
-    .stdout.toString()
-    .trim();
+  return spawnSync("git", ["-C", dir, "rev-parse", "HEAD"]).stdout.toString().trim();
 }
 
 /**
@@ -69,10 +68,7 @@ describe("§6.1 commit ref", () => {
     expect(s.workspaces[slug]?.branch).toBeUndefined();
 
     // HEAD is detached exactly at the requested commit.
-    const head = Bun.spawnSync(["git", "-C", expectedPath, "rev-parse", "HEAD"], {
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    const head = spawnSync("git", ["-C", expectedPath, "rev-parse", "HEAD"])
       .stdout.toString()
       .trim();
     expect(head).toBe(sha);
@@ -98,11 +94,11 @@ describe("§17.2 scenario 12 — list --json shape & doctor fix hint", () => {
 
   it("doctor on a repo with a deleted fetch refspec fails with the fix hint", async () => {
     await env.run(["n8n", "feature-x", "checkout"]); // clones + configures the bare repo
-    const unset = Bun.spawnSync(
-      ["git", "-C", env.repoPath("n8n"), "config", "--unset-all", "remote.origin.fetch"],
-      { stdout: "pipe", stderr: "pipe" },
+    const unset = spawnSync(
+      "git",
+      ["-C", env.repoPath("n8n"), "config", "--unset-all", "remote.origin.fetch"],
     );
-    expect(unset.exitCode).toBe(0);
+    expect(unset.status).toBe(0);
 
     const r = await env.run(["--json", "doctor"]);
     expect(r.code).not.toBe(0);
