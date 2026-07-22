@@ -70,12 +70,11 @@ The examples below use `uxd`; substitute `bun run bin/uxd` if you have not insta
 
 ## Quick start
 
-1. Point `uxd` at a project. By default `uxd` reads its config from `${XDG_CONFIG_HOME:-~/.config}/uxd`; set `UXD_CONFIG_DIR` to keep everything under `~/.uxd`:
+1. Point `uxd` at a project. By default `uxd` reads its config from `~/.uxd` (override with `UXD_CONFIG_DIR` or `--config-dir`):
 
    ```bash
-   export UXD_CONFIG_DIR=~/.uxd        # add to your shell profile to persist
    uxd config path                     # → ~/.uxd
-   uxd config edit my-project          # open (or create) ~/.uxd/my-project.toml
+   uxd config add my-project           # open (or create) ~/.uxd/my-project.toml
    ```
 
    A minimal `my-project.toml`:
@@ -288,6 +287,7 @@ uxd projects                                 # list configured projects
 uxd doctor                                   # diagnose environment & configs
 uxd config path                              # print the config dir
 uxd config edit [project]                    # edit defaults or a project file
+uxd config add [project]                     # alias of `config edit`
 uxd config validate [project]                # validate all configs, or one
 uxd completions <bash|zsh|fish>              # print a completion script
 uxd help                                     # usage
@@ -343,7 +343,7 @@ uxd my-project 42 diff --dry-run
 `uxd` reads per-project TOML files from the config dir, resolved as:
 
 ```
---config-dir → $UXD_CONFIG_DIR → ${XDG_CONFIG_HOME:-~/.config}/uxd
+--config-dir → $UXD_CONFIG_DIR → ~/.uxd
 ```
 
 ### Layout
