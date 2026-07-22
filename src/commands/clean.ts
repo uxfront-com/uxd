@@ -8,6 +8,7 @@ import { acquireLock, loadState, saveState, type State, type Workspace } from ".
 import { disposeWorkspace, workspaceDiskBytes } from "../core/remove.ts";
 import { isDirty, mergedBranches } from "../git/worktree.ts";
 import { fetchBranch, type GitEnv } from "../git/repo.ts";
+import { ghRepoSlug } from "../core/workspace.ts";
 import { slug as slugFor } from "../core/resolve.ts";
 import type { ProjectInput, WorkspaceInput } from "./types.ts";
 import type { Ctx, ProjectConfig } from "../config/schema.ts";
@@ -24,6 +25,10 @@ interface Filters {
   all: boolean;
   olderThanMs?: number;
   merged: boolean;
+  /** PRs whose upstream PR is closed/merged (gh state, else git --merged). */
+  closed: boolean;
+  /** State entries whose worktree directory is gone (§9.11 doctor hint). */
+  pruneState: boolean;
 }
 
 function fmtBytes(bytes: number | null): string {
@@ -86,7 +91,7 @@ async function execute(
 export async function clean(input: ProjectInput): Promise<number> {
   const { ctx, project } = input;
   const flags = parseFlags(input.args, {
-    bools: ["--all", "--merged", "--include-adopted", "--force", "--yes", "--prune-state"],
+    bools: ["--all", "--merged", "--closed", "--include-adopted", "--force", "--yes", "--prune-state"],
     values: ["--older-than"],
   });
   if (flags.bool("--yes")) ctx.flags.yes = true;
@@ -97,17 +102,24 @@ export async function clean(input: ProjectInput): Promise<number> {
     all: flags.bool("--all"),
     olderThanMs: parseOlderThan(flags.value("--older-than")),
     merged: flags.bool("--merged"),
+    closed: flags.bool("--closed"),
+    pruneState: flags.bool("--prune-state"),
   };
 
-  const hasFilter = filters.all || filters.merged || filters.olderThanMs !== undefined;
+  const hasFilter =
+    filters.all ||
+    filters.merged ||
+    filters.closed ||
+    filters.pruneState ||
+    filters.olderThanMs !== undefined;
   if (explicit.length === 0 && !hasFilter) {
     throw usage(
       "clean requires explicit slugs or a filter",
-      "e.g. `uxd <project> clean pr-19234`, `--all`, `--merged`, or `--older-than 7d`",
+      "e.g. `uxd <project> clean pr-19234`, `--all`, `--merged`, `--closed`, `--prune-state`, or `--older-than 7d`",
     );
   }
   if (explicit.length > 0 && hasFilter) {
-    throw usage("explicit slugs cannot be combined with --all/--merged/--older-than");
+    throw usage("explicit slugs cannot be combined with --all/--merged/--closed/--prune-state/--older-than");
   }
 
   if (ctx.flags.dryRun) {
@@ -190,12 +202,17 @@ async function selectByFilters(
 ): Promise<Workspace[]> {
   const now = Date.now();
   const merged = filters.merged ? await mergedSlugs(ctx, project, all) : null;
+  const closed = filters.closed ? await closedSlugs(ctx, project, all) : null;
 
   const selected: Workspace[] = [];
   for (const ws of all) {
     if (ws.adopted && !includeAdopted) continue;
 
     const why: string[] = [];
+    if (filters.pruneState) {
+      if (existsSync(ws.path)) continue; // only entries whose worktree is gone
+      why.push("state-only");
+    }
     if (filters.olderThanMs !== undefined) {
       const age = now - Date.parse(ws.lastUsedAt);
       if (!(age >= filters.olderThanMs)) continue;
@@ -205,11 +222,55 @@ async function selectByFilters(
       if (!merged!.has(ws.slug)) continue;
       why.push("merged");
     }
+    if (filters.closed) {
+      if (!closed!.has(ws.slug)) continue;
+      why.push("closed");
+    }
     // --all with no narrowing filter takes everything above.
     reasons.set(ws.slug, why.join(", "));
     selected.push(ws);
   }
   return selected;
+}
+
+/**
+ * Slugs whose upstream PR is closed or merged (§9.9). Prefers gh's authoritative
+ * state, then a cached `ws.pr.state`, and finally falls back to the git-only
+ * `--merged` heuristic when neither is available.
+ */
+async function closedSlugs(ctx: Ctx, project: ProjectConfig, all: Workspace[]): Promise<Set<string>> {
+  const slugs = new Set<string>();
+  const prs = all.filter((w) => w.kind === "pr" && w.number !== undefined);
+  if (prs.length === 0) return slugs;
+
+  const isClosed = (state: string) => {
+    const s = state.toUpperCase();
+    return s === "CLOSED" || s === "MERGED";
+  };
+
+  if (await ctx.gh.available()) {
+    const repo = ghRepoSlug(project.repo);
+    if (repo) {
+      for (const ws of prs) {
+        const meta = await ctx.gh.prView(repo, ws.number!);
+        if (isClosed(meta?.state ?? ws.pr?.state ?? "")) slugs.add(ws.slug);
+      }
+      return slugs;
+    }
+  }
+
+  // No gh: trust cached PR state if any workspace carries it.
+  let anyCached = false;
+  for (const ws of prs) {
+    if (ws.pr?.state) {
+      anyCached = true;
+      if (isClosed(ws.pr.state)) slugs.add(ws.slug);
+    }
+  }
+  if (anyCached) return slugs;
+
+  // Last resort: a PR branch merged into the default branch counts as closed.
+  return mergedSlugs(ctx, project, all);
 }
 
 /** Slugs whose branch is merged into origin/<default> (git-only, no gh). */
@@ -243,7 +304,7 @@ export async function rm(input: WorkspaceInput): Promise<number> {
   const flags = parseFlags(input.args, { bools: ["--force", "--yes"] });
   if (flags.bool("--yes")) ctx.flags.yes = true;
   const slug = slugFor(ref);
-  const noFilters: Filters = { all: false, merged: false };
+  const noFilters: Filters = { all: false, merged: false, closed: false, pruneState: false };
 
   if (ctx.flags.dryRun) {
     return runClean(ctx, project, [slug], noFilters, true, flags.bool("--force"), true);

@@ -12,19 +12,23 @@ import { allocatePorts, tcpPortFree } from "./ports.ts";
 import {
   addBranchWorktreeArgv,
   addPrWorktreeArgv,
+  addCommitWorktreeArgv,
   addBranchWorktree,
   addPrWorktree,
+  addCommitWorktree,
   isGitWorktree,
 } from "../git/worktree.ts";
 import {
   bareCloneArgv,
   detectDefaultBranch,
   fetchBranch,
+  fetchCommit,
   fetchPr,
   initConfigArgvs,
   initFetchArgv,
   initPrimaryRepo,
   isInitialized,
+  wireForkPushBack,
   wirePrPushBack,
   type GitEnv,
 } from "../git/repo.ts";
@@ -173,20 +177,28 @@ async function materialize(
   }
   const dir = join(project.worktreesPath, slug);
 
-  let branch: string;
+  let branch: string | undefined;
   let number: number | undefined;
+  let ref: string;
   if (spec.kind === "branch") {
     await fetchBranch(g, spec.name);
     await addBranchWorktree(g, dir, spec.name);
     branch = spec.name;
+    ref = spec.name;
   } else if (spec.kind === "pr") {
     await fetchPr(g, spec.number);
     await addPrWorktree(g, dir, spec.number);
     branch = `pr/${spec.number}`;
     number = spec.number;
+    ref = String(spec.number);
+  } else if (spec.kind === "commit") {
+    // commit ref (§6.2, §7.2): ensure the object is present, then detach (M2).
+    await fetchCommit(g, spec.sha);
+    await addCommitWorktree(g, dir, spec.sha);
+    ref = spec.sha;
   } else {
-    // commit refs are M2
-    throw resolveError("commit refs are not supported until M2");
+    // `last` is resolved upstream by resolveLast(); reaching here is a bug.
+    throw resolveError(`unresolved ref kind: ${spec.kind}`);
   }
 
   const ports = allocateFor(project, slug, existing);
@@ -194,8 +206,8 @@ async function materialize(
 
   const ws: Workspace = {
     slug,
-    ref: spec.kind === "pr" ? String(spec.number) : spec.name,
-    kind: spec.kind,
+    ref,
+    kind: spec.kind as "branch" | "pr" | "commit",
     number,
     branch,
     path: dir,
@@ -232,12 +244,31 @@ async function wirePr(ctx: Ctx, project: ProjectConfig, n: number, ws: Workspace
     fetchedAt: new Date().toISOString(),
   };
 
+  const g = gitEnv(ctx, project);
   if (!meta.isCrossRepository && meta.headRefName) {
-    const g = gitEnv(ctx, project);
     await wirePrPushBack(g, n, meta.headRefName);
+  } else if (meta.isCrossRepository && meta.headRefName && meta.headRepositoryOwner) {
+    const forkUrl = forkCloneUrl(project.repo, meta.headRepositoryOwner);
+    if (forkUrl) {
+      await wireForkPushBack(g, n, meta.headRepositoryOwner, forkUrl, meta.headRefName);
+    } else {
+      ctx.log.warn(`could not derive fork URL for ${meta.headRepositoryOwner} — push-back left read-only`);
+    }
   } else if (meta.isCrossRepository) {
-    ctx.log.warn("push-back unavailable for fork PRs without additional setup (M2)");
+    ctx.log.warn("push-back unavailable for fork PRs without gh");
   }
+}
+
+/**
+ * Build a fork's clone URL from the base repo URL by swapping the owner segment
+ * (§7.3). Preserves the base's transport (ssh vs https) and `.git` suffix.
+ */
+export function forkCloneUrl(baseRepo: string, owner: string): string | null {
+  const ssh = baseRepo.match(/^(git@[^:]+:)([^/]+)\/(.+)$/);
+  if (ssh) return `${ssh[1]}${owner}/${ssh[3]}`;
+  const https = baseRepo.match(/^(https?:\/\/[^/]+\/)([^/]+)\/(.+)$/);
+  if (https) return `${https[1]}${owner}/${https[3]}`;
+  return null;
 }
 
 /** Re-fetch on the fast path when `--fetch` is passed (§8.1). */
@@ -301,6 +332,9 @@ function dryRunPlan(ctx: Ctx, project: ProjectConfig, refSpec: RefSpec): EnsureR
       ]),
     );
     lines.push(shellJoin(addPrWorktreeArgv(project.repoPath, dir, spec.number)));
+  } else if (spec.kind === "commit") {
+    lines.push(shellJoin(["git", "-C", project.repoPath, "fetch", "origin", spec.sha, "--no-tags"]));
+    lines.push(shellJoin(addCommitWorktreeArgv(project.repoPath, dir, spec.sha)));
   }
   lines.push(`mkdir -p ${dataDir}`);
 
@@ -309,7 +343,7 @@ function dryRunPlan(ctx: Ctx, project: ProjectConfig, refSpec: RefSpec): EnsureR
   const now = new Date().toISOString();
   const ws: Workspace = {
     slug,
-    ref: spec.kind === "pr" ? String(spec.number) : spec.kind === "branch" ? spec.name : String(spec.kind),
+    ref: spec.kind === "pr" ? String(spec.number) : spec.kind === "branch" ? spec.name : spec.kind === "commit" ? spec.sha : String(spec.kind),
     kind: spec.kind === "last" ? "branch" : spec.kind,
     number: spec.kind === "pr" ? spec.number : undefined,
     branch: spec.kind === "pr" ? `pr/${spec.number}` : spec.kind === "branch" ? spec.name : undefined,

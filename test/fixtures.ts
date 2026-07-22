@@ -4,6 +4,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main, unavailableGh } from "../src/main.ts";
+import type { GhClient, PrMeta } from "../src/git/gh.ts";
 
 const AUTHOR_ENV = {
   GIT_AUTHOR_NAME: "uxd-test",
@@ -105,9 +106,15 @@ export interface Harness {
 
 /**
  * Write project configs into a tmp config dir and return a `run()` that invokes
- * main() in-process with env pointed at tmp and `gh` forced unavailable.
+ * main() in-process with env pointed at tmp. `gh` defaults to unavailable; pass
+ * a fake client to exercise the gh-driven paths (list status, diff, --closed).
  */
-export function makeEnv(tmp: string, projects: Record<string, ProjectSpec>): Harness {
+export function makeEnv(
+  tmp: string,
+  projects: Record<string, ProjectSpec>,
+  opts: { gh?: GhClient } = {},
+): Harness {
+  const gh = opts.gh ?? unavailableGh;
   const configDir = join(tmp, "config");
   const stateHome = join(tmp, "state");
   mkdirSync(configDir, { recursive: true });
@@ -151,7 +158,7 @@ export function makeEnv(tmp: string, projects: Record<string, ProjectSpec>): Har
 
     let code: number;
     try {
-      code = await main(argv, { gh: unavailableGh });
+      code = await main(argv, { gh });
     } finally {
       process.stdout.write = origOut;
       process.stderr.write = origErr;
@@ -168,4 +175,35 @@ export function makeEnv(tmp: string, projects: Record<string, ProjectSpec>): Har
 function restore(key: string, prev: string | undefined): void {
   if (prev === undefined) delete process.env[key];
   else process.env[key] = prev;
+}
+
+/**
+ * A deterministic in-memory GhClient for exercising the gh-driven paths without
+ * spawning `gh`. `metas` maps a PR number to its metadata; `prDiff` records its
+ * calls and returns exit 0.
+ */
+export function fakeGh(metas: Record<number, Partial<PrMeta>>): GhClient & { diffCalls: Array<{ n: number; args: string[] }> } {
+  const diffCalls: Array<{ n: number; args: string[] }> = [];
+  return {
+    diffCalls,
+    available: async () => true,
+    prView: async (_repo, n) => {
+      const m = metas[n];
+      if (!m) return null;
+      return {
+        headRefName: m.headRefName ?? `pr/${n}`,
+        isCrossRepository: m.isCrossRepository ?? false,
+        headRepositoryOwner: m.headRepositoryOwner ?? "",
+        state: m.state ?? "OPEN",
+        title: m.title ?? `PR #${n}`,
+        author: m.author ?? "octocat",
+        url: m.url ?? `https://github.com/acme/app/pull/${n}`,
+        ci: m.ci ?? null,
+      };
+    },
+    prDiff: async (_repo, n, args) => {
+      diffCalls.push({ n, args });
+      return 0;
+    },
+  };
 }

@@ -23,14 +23,15 @@ import type { Ctx, Defaults, ProjectConfig } from "./config/schema.ts";
 import { HELP, version } from "./cli/help.ts";
 import { checkout } from "./commands/checkout.ts";
 import { code } from "./commands/code.ts";
-import { list, info } from "./commands/list.ts";
+import { list, info, pick } from "./commands/list.ts";
 import { clean, rm } from "./commands/clean.ts";
 import { projects } from "./commands/projects.ts";
 import { doctor } from "./commands/doctor.ts";
 import { config } from "./commands/config.ts";
 import { run, exec, shell } from "./commands/process.ts";
 import { sync } from "./commands/sync.ts";
-import { diff, completions } from "./commands/unimplemented.ts";
+import { diff } from "./commands/diff.ts";
+import { completions } from "./commands/completions.ts";
 
 export interface MainOptions {
   /** Injectable GitHub client; tests pass `unavailableGh` so gh is never spawned. */
@@ -187,7 +188,11 @@ async function dispatch(result: ParseResult, ctx: Ctx, defaults: Defaults): Prom
     const project = loadProject(ctx.configDir, result.project, defaults);
     switch (result.verb) {
       case "list":
-        return list({ ctx, project, args: result.args });
+        // Bare `uxd <project>` on a TTY opens the interactive picker; an explicit
+        // `list` verb (or non-TTY/--json) always prints the plain table (§4.3/M2).
+        return result.defaulted
+          ? pick({ ctx, project, args: result.args })
+          : list({ ctx, project, args: result.args });
       case "clean":
         return clean({ ctx, project, args: result.args });
     }

@@ -14,7 +14,15 @@ import { parseRef, refFromDisambiguator, type RefSpec } from "../core/resolve.ts
 
 export type ParseResult =
   | { kind: "top"; verb: TopLevelVerb; args: string[]; global: GlobalFlags }
-  | { kind: "project"; project: string; verb: ProjectVerb; args: string[]; global: GlobalFlags }
+  | {
+      kind: "project";
+      project: string;
+      verb: ProjectVerb;
+      /** True when `list` was reached via bare `uxd <project>` (enables the TTY picker, §4.3/M2). */
+      defaulted?: boolean;
+      args: string[];
+      global: GlobalFlags;
+    }
   | {
       kind: "workspace";
       project: string;
@@ -185,7 +193,7 @@ export function parse(argv: string[], deps: ParseDeps): ParseResult {
   const p1 = rest[1];
   if (p1 === undefined || isFlag(p1)) {
     // bare `uxd <project>` ≡ `list`; leftover flags belong to list.
-    return { kind: "project", project, verb: "list", args: rest.slice(1), global };
+    return { kind: "project", project, verb: "list", defaulted: true, args: rest.slice(1), global };
   }
   if (isProjectVerb(p1)) {
     return { kind: "project", project, verb: p1, args: rest.slice(2), global };
