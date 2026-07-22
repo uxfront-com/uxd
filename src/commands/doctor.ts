@@ -4,7 +4,8 @@ import { accessSync, constants, existsSync, readdirSync, readFileSync } from "no
 import { dirname, join } from "node:path";
 import { ExitCode } from "../lib/errors.ts";
 import { stateDir } from "../lib/paths.ts";
-import { checkGitVersion, fetchRefspecConfigured, isBareRepo, isInitialized, MIN_GIT_VERSION } from "../git/repo.ts";
+import { checkGitVersion, fetchRefspecConfigured, hooksPathConfigured, isBareRepo, isInitialized, MIN_GIT_VERSION } from "../git/repo.ts";
+import { listWorktrees } from "../git/worktree.ts";
 import { listProjectNames, loadDefaults, loadProject, ConfigValidationError } from "../config/load.ts";
 import { loadState } from "../core/state.ts";
 import { presetBinary, isPreset } from "../core/editor.ts";
@@ -126,6 +127,22 @@ async function checkProject(
         ? "remote.origin.fetch configured"
         : `missing — run: git -C ${project.repoPath} config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'`,
     });
+
+    // orphaned worktrees (§9.11): reconcile git's worktree list with state, both
+    // directions. Git-known dirs uxd doesn't track, and tracked (non-adopted)
+    // paths git no longer knows, both warrant a `clean --prune-state` nudge.
+    await checkOrphans(name, project.repoPath, checks);
+
+    // core.hooksPath / husky (§9.11, §19.4–5): relative hook paths resolve wrong
+    // from worktrees. Warn, don't fix.
+    const hooks = await hooksPathConfigured(project.repoPath);
+    if (hooks) {
+      checks.push({
+        name: `project ${name}: hooks`,
+        status: "warn",
+        detail: `core.hooksPath=${hooks} — hooks may misbehave in worktrees (husky/relative paths)`,
+      });
+    }
   } else {
     const writable = canWriteDir(project.repoPath);
     checks.push({
@@ -162,6 +179,37 @@ async function checkProject(
   } catch (e) {
     checks.push({ name: `project ${name}: state`, status: "fail", detail: String((e as Error).message) });
   }
+}
+
+/**
+ * Warn on drift between git's worktree list and uxd state (§9.11). The bare repo
+ * itself is excluded, and adopted (`kind: path`) entries are ignored since they
+ * live outside this repo. A parse failure here is silent — the state-file check
+ * in checkProject reports it separately.
+ */
+async function checkOrphans(name: string, repoPath: string, checks: Check[]): Promise<void> {
+  let tracked: Set<string>;
+  try {
+    const st = loadState(name);
+    tracked = new Set(
+      Object.values(st.workspaces).filter((w) => w.kind !== "path").map((w) => w.path),
+    );
+  } catch {
+    return;
+  }
+  const gitDirs = (await listWorktrees(repoPath)).filter((d) => d !== repoPath);
+  const gitSet = new Set(gitDirs);
+  const untracked = gitDirs.filter((d) => !tracked.has(d));
+  const missing = [...tracked].filter((d) => !gitSet.has(d));
+  if (untracked.length === 0 && missing.length === 0) return;
+  const bits: string[] = [];
+  if (untracked.length) bits.push(`${untracked.length} git worktree(s) not in state`);
+  if (missing.length) bits.push(`${missing.length} state entr${missing.length === 1 ? "y" : "ies"} with no git worktree`);
+  checks.push({
+    name: `project ${name}: worktrees`,
+    status: "warn",
+    detail: `${bits.join("; ")} — reconcile with \`uxd ${name} clean --prune-state\``,
+  });
 }
 
 function isReadable(path: string): boolean {

@@ -29,6 +29,10 @@ export function addPrWorktreeArgv(repoPath: string, dir: string, n: number): str
   return ["git", "-C", repoPath, "worktree", "add", dir, `pr/${n}`];
 }
 
+export function addCommitWorktreeArgv(repoPath: string, dir: string, sha: string): string[] {
+  return ["git", "-C", repoPath, "worktree", "add", "--detach", dir, sha];
+}
+
 // ── Operations ───────────────────────────────────────────────────────────────
 
 /** Add a worktree for a branch ref; surfaces the "already checked out" dedupe path (§7.2). */
@@ -43,6 +47,14 @@ export async function addBranchWorktree(g: GitEnv, dir: string, name: string): P
 export async function addPrWorktree(g: GitEnv, dir: string, n: number): Promise<void> {
   const res = await runGit(g, addPrWorktreeArgv(g.repoPath, dir, n), { allowFailure: true });
   throwIfAlreadyCheckedOut(res, `pr/${n}`);
+  if (res.code !== 0) throw new UxdError("E_GIT", `git worktree add: ${res.stderr.trim()}`);
+  g.log.step(`worktree ready: ${dir}`);
+}
+
+/** Add a detached worktree at a specific commit sha (§7.2, M2). */
+export async function addCommitWorktree(g: GitEnv, dir: string, sha: string): Promise<void> {
+  const res = await runGit(g, addCommitWorktreeArgv(g.repoPath, dir, sha), { allowFailure: true });
+  throwIfAlreadyCheckedOut(res, sha);
   if (res.code !== 0) throw new UxdError("E_GIT", `git worktree add: ${res.stderr.trim()}`);
   g.log.step(`worktree ready: ${dir}`);
 }

@@ -1,6 +1,6 @@
 // GitHub CLI client — graceful absence (§7.3, §15.2). Never invoked in tests.
 
-import { capture } from "../lib/proc.ts";
+import { capture, passthrough } from "../lib/proc.ts";
 
 export interface PrMeta {
   headRefName: string;
@@ -10,15 +10,45 @@ export interface PrMeta {
   title: string;
   author: string;
   url: string;
+  /** Rolled-up CI conclusion; only populated on a fresh view, never persisted (§7.3). */
+  ci?: "pass" | "fail" | "pending" | null;
 }
 
 export interface GhClient {
   available(): Promise<boolean>;
   prView(repo: string, n: number): Promise<PrMeta | null>; // null on any failure
-  prDiff(repo: string, n: number): Promise<number>; // passthrough exit code
+  /** Delegate to `gh pr diff`, inheriting stdio so gh pages normally (§9.7). */
+  prDiff(repo: string, n: number, args: string[]): Promise<number>; // passthrough exit code
 }
 
-const PR_FIELDS = "headRefName,isCrossRepository,headRepositoryOwner,state,title,author,url";
+const PR_FIELDS = "headRefName,isCrossRepository,headRepositoryOwner,state,title,author,url,statusCheckRollup";
+
+interface StatusCheck {
+  status?: string; // e.g. COMPLETED, IN_PROGRESS
+  conclusion?: string; // e.g. SUCCESS, FAILURE, NEUTRAL
+  state?: string; // legacy commit-status shape: SUCCESS, FAILURE, PENDING
+}
+
+/**
+ * Reduce gh's `statusCheckRollup` array to a single CI verdict (§9.8). Any
+ * failure → fail; any still-running → pending; all conclusive & clean → pass;
+ * empty/absent → null (no marker).
+ */
+function rollupCi(rollup: StatusCheck[] | undefined): "pass" | "fail" | "pending" | null {
+  if (!rollup || rollup.length === 0) return null;
+  let pending = false;
+  for (const c of rollup) {
+    const verdict = (c.conclusion || c.state || "").toUpperCase();
+    if (verdict === "FAILURE" || verdict === "ERROR" || verdict === "CANCELLED" || verdict === "TIMED_OUT") {
+      return "fail";
+    }
+    const running = (c.status || "").toUpperCase();
+    if (verdict === "" || verdict === "PENDING" || running === "IN_PROGRESS" || running === "QUEUED") {
+      pending = true;
+    }
+  }
+  return pending ? "pending" : "pass";
+}
 
 export class RealGhClient implements GhClient {
   private cachedAvailable: boolean | undefined;
@@ -49,6 +79,7 @@ export class RealGhClient implements GhClient {
         title?: string;
         author?: { login?: string } | null;
         url?: string;
+        statusCheckRollup?: StatusCheck[];
       };
       return {
         headRefName: raw.headRefName ?? "",
@@ -58,15 +89,15 @@ export class RealGhClient implements GhClient {
         title: raw.title ?? "",
         author: raw.author?.login ?? "",
         url: raw.url ?? "",
+        ci: rollupCi(raw.statusCheckRollup),
       };
     } catch {
       return null;
     }
   }
 
-  async prDiff(): Promise<number> {
-    // Delegation implemented in M2 (`diff` verb).
-    return 0;
+  async prDiff(repo: string, n: number, args: string[]): Promise<number> {
+    return passthrough(["gh", "pr", "diff", String(n), "--repo", repo, ...args]);
   }
 }
 

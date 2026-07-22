@@ -101,12 +101,39 @@ export async function fetchPr(g: GitEnv, n: number): Promise<void> {
 }
 
 /**
+ * Ensure a commit object is present locally, fetching it from origin if the
+ * partial clone hasn't materialized it yet (§6.2, §7.2). A commit already on a
+ * fetched branch is present after the init fetch and needs no network.
+ */
+export async function fetchCommit(g: GitEnv, sha: string): Promise<void> {
+  if (!g.dryRun && (await commitPresent(g.repoPath, sha))) return;
+  g.log.step(`fetching commit ${sha.slice(0, 10)}`);
+  const res = await runGit(g, ["git", "-C", g.repoPath, "fetch", "origin", sha, "--no-tags"], {
+    allowFailure: true,
+  });
+  if (res.code !== 0) throw classifyFetchError(res.stderr, `commit ${sha.slice(0, 10)}`);
+}
+
+/** True when `sha` resolves to a commit object in the local repo. */
+async function commitPresent(repoPath: string, sha: string): Promise<boolean> {
+  const res = await capture(["git", "-C", repoPath, "cat-file", "-e", `${sha}^{commit}`], {
+    allowFailure: true,
+    env: env(),
+  });
+  return res.code === 0;
+}
+
+/**
  * A failed fetch is E_RESOLVE (exit 4) when the ref simply isn't on origin, and
  * E_GIT (exit 5) for any other transport/plumbing failure (§14).
  */
 function classifyFetchError(stderr: string, ref: string): UxdError {
   const detail = stderr.trim();
-  if (/couldn't find remote ref|no such ref|remote ref .* not found/i.test(detail)) {
+  if (
+    /couldn't find remote ref|no such ref|remote ref .* not found|not our ref|unadvertised object|did not send all necessary objects/i.test(
+      detail,
+    )
+  ) {
     return new UxdError("E_RESOLVE", `${ref} does not exist on origin`, {
       hint: "check the name, or push the ref first",
     });
@@ -126,6 +153,48 @@ export async function wirePrPushBack(g: GitEnv, n: number, headRefName: string):
     `refs/heads/${headRefName}`,
   ]);
   g.log.step(`push-back wired to origin/${headRefName}`);
+}
+
+/**
+ * Wire fork-PR push-back (§7.3, M2): add (or reuse) a `fork-<owner>` remote for
+ * the contributor's clone, fetch the PR head branch onto it, and point the local
+ * `pr/<n>` branch's upstream at `fork-<owner>/<headRefName>` so a plain push
+ * lands on the fork. Best-effort — a fetch failure degrades to read-only.
+ */
+export async function wireForkPushBack(
+  g: GitEnv,
+  n: number,
+  owner: string,
+  forkUrl: string,
+  headRefName: string,
+): Promise<void> {
+  const remote = `fork-${owner}`;
+  if (!(await remoteExists(g.repoPath, remote))) {
+    await runGit(g, ["git", "-C", g.repoPath, "remote", "add", remote, forkUrl]);
+  } else {
+    await runGit(g, ["git", "-C", g.repoPath, "remote", "set-url", remote, forkUrl]);
+  }
+  const fetched = await runGit(
+    g,
+    ["git", "-C", g.repoPath, "fetch", remote, headRefName, "--no-tags"],
+    { allowFailure: true },
+  );
+  if (!g.dryRun && fetched.code !== 0) {
+    g.log.warn(`fork fetch failed for ${remote}/${headRefName} — push-back left read-only`);
+    return;
+  }
+  await runGit(g, ["git", "-C", g.repoPath, "config", `branch.pr/${n}.remote`, remote]);
+  await runGit(g, ["git", "-C", g.repoPath, "config", `branch.pr/${n}.merge`, `refs/heads/${headRefName}`]);
+  g.log.step(`fork push-back wired to ${remote}/${headRefName}`);
+}
+
+/** True when a named remote is already configured. */
+async function remoteExists(repoPath: string, remote: string): Promise<boolean> {
+  const res = await capture(["git", "-C", repoPath, "remote", "get-url", remote], {
+    allowFailure: true,
+    env: env(),
+  });
+  return res.code === 0;
 }
 
 /** Parse `git --version` into a comparable string; throws E_GIT if too old. */
@@ -163,4 +232,17 @@ export async function fetchRefspecConfigured(repoPath: string): Promise<boolean>
     { allowFailure: true, env: env() },
   );
   return res.code === 0 && res.stdout.includes("refs/remotes/origin/*");
+}
+
+/**
+ * Read `core.hooksPath` from a repo, if set (doctor §9.11, gotcha §19.4–5).
+ * A hooks path (often husky's `.husky`) can resolve wrong from worktrees.
+ */
+export async function hooksPathConfigured(repoPath: string): Promise<string | null> {
+  const res = await capture(["git", "-C", repoPath, "config", "--get", "core.hooksPath"], {
+    allowFailure: true,
+    env: env(),
+  });
+  const val = res.stdout.trim();
+  return res.code === 0 && val !== "" ? val : null;
 }
