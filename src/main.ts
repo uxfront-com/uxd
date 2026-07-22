@@ -66,7 +66,7 @@ export async function main(argv: string[], opts: MainOptions = {}): Promise<numb
 
 // ── Config-dir resolution (§5.1) ────────────────────────────────────────────
 
-/** --config-dir flag → $UXD_CONFIG_DIR → ${XDG_CONFIG_HOME:-~/.config}/uxd. */
+/** --config-dir flag → $UXD_CONFIG_DIR → ~/.uxd. */
 function resolveConfigDir(argv: string[]): string {
   const fromFlag = preScanConfigDir(argv);
   if (fromFlag) return fromFlag;

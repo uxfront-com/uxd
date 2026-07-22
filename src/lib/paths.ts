@@ -16,19 +16,9 @@ export function resolvePath(p: string, base = process.cwd()): string {
   return isAbsolute(expanded) ? expanded : resolve(base, expanded);
 }
 
-function xdgDir(envVar: string, fallbackSub: string): string {
-  const fromEnv = process.env[envVar];
-  if (fromEnv && fromEnv.trim() !== "") return expandTilde(fromEnv);
-  return join(homedir(), fallbackSub);
-}
-
-/** `${XDG_CONFIG_HOME:-~/.config}/uxd` (§5.1). */
+/** Default config directory: `~/.uxd` (§5.1). Override via --config-dir / $UXD_CONFIG_DIR. */
 export function defaultConfigDir(): string {
-  return join(xdgConfigHome(), "uxd");
-}
-
-export function xdgConfigHome(): string {
-  return xdgDir("XDG_CONFIG_HOME", ".config");
+  return join(homedir(), ".uxd");
 }
 
 /** `${XDG_STATE_HOME:-~/.local/state}/uxd` (§7.6, §8.2). */
