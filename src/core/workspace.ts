@@ -30,10 +30,16 @@ import {
 } from "../git/repo.ts";
 import { wsContext } from "./env.ts";
 import { runHook } from "./hooks.ts";
+import { runSetup } from "./setup.ts";
+import { fnv1a32 } from "../lib/hash.ts";
 
 export interface EnsureOptions {
   setup: boolean;
   fetch?: boolean;
+  /** Overwrite seed targets during setup (§8.4.1). */
+  reseed?: boolean;
+  /** Run the `pre_run` hook after setup — run/exec/shell only (§8.4.4). */
+  preRun?: boolean;
 }
 
 export interface EnsureResult {
@@ -42,7 +48,8 @@ export interface EnsureResult {
   dataDir: string;
 }
 
-function dataDirFor(project: ProjectConfig, slug: string): string {
+/** `<worktrees_path>/.data/<slug>` — a workspace's private mutable data dir (§8.3). */
+export function dataDirFor(project: ProjectConfig, slug: string): string {
   return join(project.worktreesPath, ".data", slug);
 }
 
@@ -51,7 +58,7 @@ function gitEnv(ctx: Ctx, project: ProjectConfig, planned?: string[][]): GitEnv 
 }
 
 /** Resolve a `last` ref against saved state; other kinds pass through. */
-function resolveLast(project: ProjectConfig, spec: RefSpec): RefSpec {
+export function resolveLast(project: ProjectConfig, spec: RefSpec): RefSpec {
   if (spec.kind !== "last") return spec;
   const state = loadState(project.name);
   if (!state.lastRef) throw resolveError(`no last-used ref for '${project.name}'`);
@@ -89,16 +96,27 @@ export async function ensureWorkspace(
     } else {
       ws = await materialize(ctx, project, spec, slug, state.workspaces);
       created = true;
-      state.workspaces[slug] = ws;
+      state.workspaces[ws.slug] = ws;
+      // Persist immediately so a failing post_checkout/setup below leaves the
+      // worktree recorded in state — the next run resumes the hooks on the fast
+      // path instead of hitting "already checked out" (§8.1, §8.4.3).
+      state.lastRef = ws.ref;
+      saveState(project.name, state);
     }
 
     const dataDir = dataDirFor(project, ws.slug);
+    const wc = wsContext(project, ws, dataDir);
 
     if (created) {
-      await runHook(ctx, project, wsContext(project, ws, dataDir), "post_checkout", true);
+      await runHook(ctx, project, wc, "post_checkout", true);
     }
 
-    // setup pipeline (seeding + install) lands in M1; opts.setup is honored there.
+    if (opts.setup) {
+      await runSetup(ctx, project, ws, wc, {
+        reseed: opts.reseed ?? false,
+        preRun: opts.preRun ?? false,
+      });
+    }
 
     ws.lastUsedAt = new Date().toISOString();
     state.lastRef = ws.ref;
@@ -297,9 +315,17 @@ function dryRunPlan(ctx: Ctx, project: ProjectConfig, refSpec: RefSpec): EnsureR
     branch: spec.kind === "pr" ? `pr/${spec.number}` : spec.kind === "branch" ? spec.name : undefined,
     path: dir,
     adopted: spec.kind === "path",
-    ports: [],
+    // Deterministic-only (no TCP probing, §8.5) so run/exec/shell --dry-run can
+    // render {port}/UXD_PORT without taking a lock or binding a socket.
+    ports: deterministicPorts(project, slug),
     createdAt: now,
     lastUsedAt: now,
   };
   return { ws, created: freshRepo, dataDir };
+}
+
+/** The deterministic-first port block for a slug, used only for dry-run display (§8.5). */
+function deterministicPorts(project: ProjectConfig, slug: string): number[] {
+  const base = project.basePort + (fnv1a32(slug) % 100) * project.ports;
+  return Array.from({ length: project.ports }, (_, i) => base + i);
 }

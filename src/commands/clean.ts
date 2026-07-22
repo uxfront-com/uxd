@@ -1,11 +1,13 @@
-// `clean` / `rm` — remove workspaces by filter (§9.9). M0: explicit slugs + --all.
+// `clean` / `rm` — remove workspaces by filter (§9.9): explicit slugs, --all,
+// --older-than, and --merged (git-only fallback via `git branch --merged`).
 
 import { existsSync } from "node:fs";
 import { ExitCode, usage } from "../lib/errors.ts";
 import { parseFlags } from "../cli/flags.ts";
 import { acquireLock, loadState, saveState, type State, type Workspace } from "../core/state.ts";
 import { disposeWorkspace, workspaceDiskBytes } from "../core/remove.ts";
-import { isDirty } from "../git/worktree.ts";
+import { isDirty, mergedBranches } from "../git/worktree.ts";
+import { fetchBranch, type GitEnv } from "../git/repo.ts";
 import { slug as slugFor } from "../core/resolve.ts";
 import type { ProjectInput, WorkspaceInput } from "./types.ts";
 import type { Ctx, ProjectConfig } from "../config/schema.ts";
@@ -17,6 +19,13 @@ interface PlanEntry {
   bytes: number | null;
 }
 
+/** Selection criteria for `clean`. Explicit slugs bypass all of these (§9.9). */
+interface Filters {
+  all: boolean;
+  olderThanMs?: number;
+  merged: boolean;
+}
+
 function fmtBytes(bytes: number | null): string {
   if (bytes === null) return "?";
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
@@ -24,13 +33,14 @@ function fmtBytes(bytes: number | null): string {
   return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
 }
 
-async function buildPlan(targets: Workspace[]): Promise<PlanEntry[]> {
+async function buildPlan(targets: Workspace[], reasons: Map<string, string>): Promise<PlanEntry[]> {
   const plan: PlanEntry[] = [];
   for (const ws of targets) {
     const present = existsSync(ws.path);
     const dirty = present && !ws.adopted ? await isDirty(ws.path) : false;
     const bytes = await workspaceDiskBytes(ws.adopted ? "" : ws.path);
-    plan.push({ ws, reason: present ? "" : "missing", dirty, bytes });
+    const reason = [present ? "" : "missing", reasons.get(ws.slug) ?? ""].filter(Boolean).join(", ");
+    plan.push({ ws, reason, dirty, bytes });
   }
   return plan;
 }
@@ -76,64 +86,74 @@ async function execute(
 export async function clean(input: ProjectInput): Promise<number> {
   const { ctx, project } = input;
   const flags = parseFlags(input.args, {
-    bools: ["--all", "--include-adopted", "--force", "--yes", "--prune-state"],
+    bools: ["--all", "--merged", "--include-adopted", "--force", "--yes", "--prune-state"],
     values: ["--older-than"],
   });
   if (flags.bool("--yes")) ctx.flags.yes = true;
 
-  // M0 supports explicit slugs + --all. Other filters arrive in M1/M2.
-  for (const unsupported of ["--older-than"]) {
-    if (flags.value(unsupported)) throw usage(`${unsupported} is not available until M1`);
-  }
-
   const explicit = flags.positionals;
-  const all = flags.bool("--all");
   const includeAdopted = flags.bool("--include-adopted");
+  const filters: Filters = {
+    all: flags.bool("--all"),
+    olderThanMs: parseOlderThan(flags.value("--older-than")),
+    merged: flags.bool("--merged"),
+  };
 
-  if (!all && explicit.length === 0) {
-    throw usage("clean requires explicit slugs or --all", "e.g. `uxd <project> clean pr-19234` or `uxd <project> clean --all`");
+  const hasFilter = filters.all || filters.merged || filters.olderThanMs !== undefined;
+  if (explicit.length === 0 && !hasFilter) {
+    throw usage(
+      "clean requires explicit slugs or a filter",
+      "e.g. `uxd <project> clean pr-19234`, `--all`, `--merged`, or `--older-than 7d`",
+    );
+  }
+  if (explicit.length > 0 && hasFilter) {
+    throw usage("explicit slugs cannot be combined with --all/--merged/--older-than");
   }
 
   if (ctx.flags.dryRun) {
-    return runClean(ctx, project, explicit, all, includeAdopted, flags.bool("--force"), true);
+    return runClean(ctx, project, explicit, filters, includeAdopted, flags.bool("--force"), true);
   }
   const lock = await acquireLock(project.name, ctx.log);
   try {
-    return await runClean(ctx, project, explicit, all, includeAdopted, flags.bool("--force"), false);
+    return await runClean(ctx, project, explicit, filters, includeAdopted, flags.bool("--force"), false);
   } finally {
     lock.release();
   }
+}
+
+/** Parse `--older-than 7d` / `36h` / `90m` into milliseconds (§9.9). */
+function parseOlderThan(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const m = /^(\d+)([smhdw])$/.exec(raw.trim());
+  if (!m) throw usage(`invalid --older-than '${raw}'`, "use a count + unit, e.g. 90m, 36h, 7d, 2w");
+  const n = Number(m[1]);
+  const unit = m[2]!;
+  const scale: Record<string, number> = { s: 1e3, m: 6e4, h: 36e5, d: 864e5, w: 6048e5 };
+  return n * scale[unit]!;
 }
 
 async function runClean(
   ctx: Ctx,
   project: ProjectConfig,
   explicit: string[],
-  all: boolean,
+  filters: Filters,
   includeAdopted: boolean,
   force: boolean,
   dryRun: boolean,
 ): Promise<number> {
   const state = loadState(project.name);
-  let targets = Object.values(state.workspaces);
+  const all = Object.values(state.workspaces);
+  const reasons = new Map<string, string>();
+  let targets: Workspace[];
 
-  if (!all) {
-    const wanted = new Set(explicit);
-    const found = new Set<string>();
-    targets = targets.filter((w) => {
-      if (wanted.has(w.slug)) {
-        found.add(w.slug);
-        return true;
-      }
-      return false;
-    });
-    const missing = explicit.filter((s) => !found.has(s));
+  if (explicit.length > 0) {
+    // Explicit slugs select exactly those workspaces, adopted or not (§9.9).
+    const bySlug = new Map(all.map((w) => [w.slug, w]));
+    const missing = explicit.filter((s) => !bySlug.has(s));
     if (missing.length) throw usage(`no such workspace(s): ${missing.join(", ")}`);
-  }
-
-  // Adopted workspaces are skipped by filters unless explicitly included (§7.5).
-  if (!includeAdopted && all) {
-    targets = targets.filter((w) => !w.adopted);
+    targets = explicit.map((s) => bySlug.get(s)!);
+  } else {
+    targets = await selectByFilters(ctx, project, all, filters, includeAdopted, reasons);
   }
 
   if (targets.length === 0) {
@@ -141,7 +161,7 @@ async function runClean(
     return ExitCode.SUCCESS;
   }
 
-  const plan = await buildPlan(targets);
+  const plan = await buildPlan(targets, reasons);
   ctx.log.step("plan:");
   for (const e of plan) {
     const bits = [e.reason, e.dirty ? "dirty" : "clean", fmtBytes(e.bytes)].filter(Boolean).join(", ");
@@ -155,18 +175,82 @@ async function runClean(
   return execute(ctx, project, state, plan, force);
 }
 
+/**
+ * Apply --all / --older-than / --merged. Multiple filters intersect (a workspace
+ * must satisfy every active one). Adopted workspaces are excluded unless
+ * --include-adopted (§7.5). Collects human reasons for the plan display.
+ */
+async function selectByFilters(
+  ctx: Ctx,
+  project: ProjectConfig,
+  all: Workspace[],
+  filters: Filters,
+  includeAdopted: boolean,
+  reasons: Map<string, string>,
+): Promise<Workspace[]> {
+  const now = Date.now();
+  const merged = filters.merged ? await mergedSlugs(ctx, project, all) : null;
+
+  const selected: Workspace[] = [];
+  for (const ws of all) {
+    if (ws.adopted && !includeAdopted) continue;
+
+    const why: string[] = [];
+    if (filters.olderThanMs !== undefined) {
+      const age = now - Date.parse(ws.lastUsedAt);
+      if (!(age >= filters.olderThanMs)) continue;
+      why.push(`idle ${fmtAge(age)}`);
+    }
+    if (filters.merged) {
+      if (!merged!.has(ws.slug)) continue;
+      why.push("merged");
+    }
+    // --all with no narrowing filter takes everything above.
+    reasons.set(ws.slug, why.join(", "));
+    selected.push(ws);
+  }
+  return selected;
+}
+
+/** Slugs whose branch is merged into origin/<default> (git-only, no gh). */
+async function mergedSlugs(ctx: Ctx, project: ProjectConfig, all: Workspace[]): Promise<Set<string>> {
+  const base = project.defaultBranch ?? "main";
+  const g: GitEnv = { repoPath: project.repoPath, dryRun: false, log: ctx.log };
+  // Best-effort refresh so the merge check sees the latest default branch.
+  try {
+    await fetchBranch(g, base);
+  } catch {
+    // offline / no such branch — fall back to whatever is local
+  }
+  const branches = await mergedBranches(project.repoPath, base);
+  const slugs = new Set<string>();
+  for (const ws of all) {
+    if (ws.branch && ws.branch !== base && branches.has(ws.branch)) slugs.add(ws.slug);
+  }
+  return slugs;
+}
+
+function fmtAge(ms: number): string {
+  const days = Math.floor(ms / 864e5);
+  if (days >= 1) return `${days}d`;
+  const hours = Math.floor(ms / 36e5);
+  if (hours >= 1) return `${hours}h`;
+  return `${Math.max(1, Math.floor(ms / 6e4))}m`;
+}
+
 export async function rm(input: WorkspaceInput): Promise<number> {
   const { ctx, project, ref } = input;
   const flags = parseFlags(input.args, { bools: ["--force", "--yes"] });
   if (flags.bool("--yes")) ctx.flags.yes = true;
   const slug = slugFor(ref);
+  const noFilters: Filters = { all: false, merged: false };
 
   if (ctx.flags.dryRun) {
-    return runClean(ctx, project, [slug], false, true, flags.bool("--force"), true);
+    return runClean(ctx, project, [slug], noFilters, true, flags.bool("--force"), true);
   }
   const lock = await acquireLock(project.name, ctx.log);
   try {
-    return await runClean(ctx, project, [slug], false, true, flags.bool("--force"), false);
+    return await runClean(ctx, project, [slug], noFilters, true, flags.bool("--force"), false);
   } finally {
     lock.release();
   }

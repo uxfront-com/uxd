@@ -28,7 +28,9 @@ import { clean, rm } from "./commands/clean.ts";
 import { projects } from "./commands/projects.ts";
 import { doctor } from "./commands/doctor.ts";
 import { config } from "./commands/config.ts";
-import { run, exec, shell, sync, diff, completions } from "./commands/unimplemented.ts";
+import { run, exec, shell } from "./commands/process.ts";
+import { sync } from "./commands/sync.ts";
+import { diff, completions } from "./commands/unimplemented.ts";
 
 export interface MainOptions {
   /** Injectable GitHub client; tests pass `unavailableGh` so gh is never spawned. */

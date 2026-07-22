@@ -7,19 +7,25 @@ export interface FlagSpec {
   bools?: readonly string[];
   /** Value-taking flags, e.g. "--older-than". */
   values?: readonly string[];
+  /** Repeatable value-taking flags, e.g. "--env" (collected in order). */
+  multi?: readonly string[];
 }
 
 export interface ParsedFlags {
   bool(name: string): boolean;
   value(name: string): string | undefined;
+  /** All values for a repeatable flag, in the order they appeared. */
+  list(name: string): string[];
   positionals: string[];
 }
 
 export function parseFlags(args: string[], spec: FlagSpec): ParsedFlags {
   const bools = new Set(spec.bools ?? []);
   const values = new Set(spec.values ?? []);
+  const multi = new Set(spec.multi ?? []);
   const boolOut = new Set<string>();
   const valueOut = new Map<string, string>();
+  const multiOut = new Map<string, string[]>();
   const positionals: string[] = [];
 
   for (let i = 0; i < args.length; i++) {
@@ -32,17 +38,22 @@ export function parseFlags(args: string[], spec: FlagSpec): ParsedFlags {
     const name = eq !== -1 ? tok.slice(0, eq) : tok;
     const inline = eq !== -1 ? tok.slice(eq + 1) : undefined;
 
+    const takeValue = (): string => {
+      if (inline !== undefined) return inline;
+      const next = args[i + 1];
+      if (next === undefined) throw usage(`flag ${name} requires a value`);
+      i += 1;
+      return next;
+    };
+
     if (bools.has(name)) {
       boolOut.add(name);
     } else if (values.has(name)) {
-      if (inline !== undefined) {
-        valueOut.set(name, inline);
-      } else {
-        const next = args[i + 1];
-        if (next === undefined) throw usage(`flag ${name} requires a value`);
-        valueOut.set(name, next);
-        i += 1;
-      }
+      valueOut.set(name, takeValue());
+    } else if (multi.has(name)) {
+      const acc = multiOut.get(name) ?? [];
+      acc.push(takeValue());
+      multiOut.set(name, acc);
     } else {
       throw usage(`unknown flag '${name}'`);
     }
@@ -51,6 +62,7 @@ export function parseFlags(args: string[], spec: FlagSpec): ParsedFlags {
   return {
     bool: (n) => boolOut.has(n),
     value: (n) => valueOut.get(n),
+    list: (n) => multiOut.get(n) ?? [],
     positionals,
   };
 }
