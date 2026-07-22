@@ -715,8 +715,8 @@ Four hooks, all optional strings run via `bash -c`, cwd = worktree, env = §11.2
 
 ```
 uxd/
-  package.json            # "bin": { "uxd": "./bin/uxd" }, scripts: dev/test/build/compile
-  bin/uxd                 # #!/usr/bin/env bun → imports src/main.ts
+  package.json            # "bin": { "uxd": "./bin/uxd.ts" }, scripts: dev/test/build/compile
+  bin/uxd.ts              # #!/usr/bin/env bun → imports src/main.ts (`.ts` so `bun build --compile` loads it)
   tsconfig.json           # strict: true, noUncheckedIndexedAccess: true
   DESIGN.md               # this file
   src/
