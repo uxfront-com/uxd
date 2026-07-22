@@ -24,6 +24,7 @@ import {
   fetchBranch,
   fetchCommit,
   fetchPr,
+  refetchPr,
   initConfigArgvs,
   initFetchArgv,
   initPrimaryRepo,
@@ -275,7 +276,7 @@ export function forkCloneUrl(baseRepo: string, owner: string): string | null {
 async function refetch(ctx: Ctx, project: ProjectConfig, ws: Workspace): Promise<void> {
   const g = gitEnv(ctx, project);
   if (ws.kind === "branch" && ws.branch) await fetchBranch(g, ws.branch);
-  else if (ws.kind === "pr" && ws.number !== undefined) await fetchPr(g, ws.number);
+  else if (ws.kind === "pr" && ws.number !== undefined) await refetchPr(g, ws.path, ws.number);
 }
 
 function allocateFor(project: ProjectConfig, slug: string, existing: Record<string, Workspace>): number[] {
