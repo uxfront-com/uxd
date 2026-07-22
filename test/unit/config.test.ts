@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import {
   ConfigValidationError,
   deriveBasePort,
@@ -9,6 +9,7 @@ import {
   loadProject,
   validateAll,
 } from "../../src/config/load.ts";
+import { defaultConfigDir } from "../../src/lib/paths.ts";
 
 let dir: string;
 
@@ -146,5 +147,11 @@ describe("validateAll & defaults", () => {
     expect(bp).toBeGreaterThanOrEqual(3000);
     expect(bp).toBeLessThanOrEqual(6900);
     expect((bp - 3000) % 100).toBe(0);
+  });
+});
+
+describe("defaultConfigDir — §5.1", () => {
+  it("defaults to ~/.uxd (no XDG fallback)", () => {
+    expect(defaultConfigDir()).toBe(join(homedir(), ".uxd"));
   });
 });

@@ -9,7 +9,7 @@ import { dataDirFor, ensureWorkspace, resolveLast } from "../core/workspace.ts";
 import { disposeWorkspace } from "../core/remove.ts";
 import { wsContext } from "../core/env.ts";
 import { runHook } from "../core/hooks.ts";
-import { fetchBranch, fetchPr, type GitEnv } from "../git/repo.ts";
+import { fetchBranch, fetchPrHead, type GitEnv } from "../git/repo.ts";
 import {
   cleanUntracked,
   diffCount,
@@ -73,9 +73,11 @@ async function syncReset(ctx: Ctx, project: ProjectConfig, ref: RefSpec, mode: M
       throw resolveError(`no workspace for '${slug}'`, "run `uxd <project> <ref> checkout` first");
     }
 
-    // 1. Re-fetch for the workspace's kind (forced for PRs, §7.4.1).
+    // 1. Re-fetch for the workspace's kind (forced for PRs, §7.4.1). PR heads
+    //    land in FETCH_HEAD (not refs/heads/pr/<n>, which git refuses to update
+    //    while checked out); the reset target below is FETCH_HEAD.
     const g = gitEnv(ctx, project);
-    if (ws.kind === "pr" && ws.number !== undefined) await fetchPr(g, ws.number);
+    if (ws.kind === "pr" && ws.number !== undefined) await fetchPrHead(g, ws.path, ws.number);
     else if (ws.kind === "branch" && ws.branch) await fetchBranch(g, ws.branch);
 
     // 2. Determine the reset target (§7.4.2).
@@ -148,7 +150,9 @@ async function syncFresh(ctx: Ctx, project: ProjectConfig, ref: RefSpec): Promis
 }
 
 async function resolveTarget(ws: Workspace): Promise<string> {
-  if (ws.kind === "pr" && ws.number !== undefined) return `refs/heads/pr/${ws.number}`;
+  // PR heads were fetched into FETCH_HEAD (see step 1) to avoid updating the
+  // checked-out pr/<n> branch; reset the worktree straight to it.
+  if (ws.kind === "pr" && ws.number !== undefined) return "FETCH_HEAD";
   if (await hasUpstream(ws.path)) return "@{u}";
   return ws.branch ?? "HEAD";
 }
@@ -157,9 +161,9 @@ function dryRunSync(ctx: Ctx, project: ProjectConfig, ref: RefSpec, mode: Mode):
   const { ws } = requireWorkspace(project, ref);
   const fetchArgv =
     ws.kind === "pr" && ws.number !== undefined
-      ? ["git", "-C", project.repoPath, "fetch", "origin", `+refs/pull/${ws.number}/head:refs/heads/pr/${ws.number}`, "--no-tags"]
+      ? ["git", "-C", ws.path, "fetch", "origin", `refs/pull/${ws.number}/head`, "--no-tags"]
       : ["git", "-C", project.repoPath, "fetch", "origin", ws.branch ?? "HEAD", "--no-tags"];
-  const target = ws.kind === "pr" && ws.number !== undefined ? `refs/heads/pr/${ws.number}` : "@{u}";
+  const target = ws.kind === "pr" && ws.number !== undefined ? "FETCH_HEAD" : "@{u}";
 
   process.stdout.write(`${fetchArgv.join(" ")}\n`);
   if (mode === "fresh") {

@@ -44,7 +44,7 @@ PROJECT VERBS
 TOP-LEVEL VERBS
   projects            list configured projects
   doctor              diagnose environment & configs
-  config              path | edit [project] | validate [project]
+  config              path | edit [project] | add [project] | validate [project]
   completions         shell completions (M2)
   help                this text
   version             print version
@@ -59,5 +59,5 @@ GLOBAL FLAGS
   -y, --yes           assume yes for prompts
   --no-color          disable ANSI color
 
-Config dir: --config-dir → $UXD_CONFIG_DIR → \${XDG_CONFIG_HOME:-~/.config}/uxd
+Config dir: --config-dir → $UXD_CONFIG_DIR → ~/.uxd
 `;

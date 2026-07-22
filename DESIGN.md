@@ -187,7 +187,7 @@ Ref disambiguators (workspace commands only): `--pr <n>`, `--branch <name>`, `--
 
 ### 5.1 Discovery
 
-Config directory resolution order: `--config-dir` flag → `UXD_CONFIG_DIR` env → `${XDG_CONFIG_HOME:-~/.config}/uxd`. If the directory does not exist, every command except `help`/`version`/`config path` fails with exit 3 and a hint to create it.
+Config directory resolution order: `--config-dir` flag → `UXD_CONFIG_DIR` env → `~/.uxd` (default). If the directory does not exist, every command except `help`/`version`/`config path` fails with exit 3 and a hint to create it.
 
 ### 5.2 Layout
 
@@ -618,7 +618,7 @@ Runs the checks below; each prints `ok` / `warn` / `fail` + one-line detail to s
 
 ### 9.12 `config`
 
-`config path` → print config dir (stdout). `config edit [project]` → open `<project>.toml` (or the dir) in `$EDITOR`/project editor. `config validate [project]` → run schema validation for one/all projects, report per §5.4, exit 3 on any error.
+`config path` → print config dir (stdout). `config edit [project]` (alias `config add [project]`) → open `<project>.toml` (or the dir) in `$EDITOR`/project editor. `config validate [project]` → run schema validation for one/all projects, report per §5.4, exit 3 on any error.
 
 ### 9.13 `completions <bash|zsh|fish>` (M2)
 

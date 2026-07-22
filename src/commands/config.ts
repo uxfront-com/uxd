@@ -1,4 +1,4 @@
-// `config path | edit | validate` (§9.12).
+// `config path | edit | add | validate` (§9.12). `add` is an alias of `edit`.
 
 import { existsSync } from "node:fs";
 import { ExitCode, usage } from "../lib/errors.ts";
@@ -24,11 +24,12 @@ export async function config(input: TopInput): Promise<number> {
     case "path":
       return path(ctx.configDir);
     case "edit":
+    case "add": // `add` is a discoverable alias of `edit` — both open the file (§9.12).
       return edit(input, rest[0]);
     case "validate":
       return validate(input, rest[0]);
     default:
-      throw usage(`unknown config subcommand '${sub}'`, "expected: path | edit | validate");
+      throw usage(`unknown config subcommand '${sub}'`, "expected: path | edit | add | validate");
   }
 }
 

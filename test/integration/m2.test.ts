@@ -31,6 +31,12 @@ function state(): { workspaces: Record<string, { slug: string; kind: string; bra
   return JSON.parse(readFileSync(join(env.stateHome, "uxd", "n8n.json"), "utf8"));
 }
 
+function headSha(dir: string): string {
+  return Bun.spawnSync(["git", "-C", dir, "rev-parse", "HEAD"], { stdout: "pipe", stderr: "pipe" })
+    .stdout.toString()
+    .trim();
+}
+
 /**
  * A second harness over the *same* tmp (so it reuses the already-cloned bare
  * repo and worktrees) but whose `repo` is a GitHub-style URL. Git operations
@@ -130,6 +136,27 @@ describe("gh-driven paths (fake gh client)", () => {
     expect(gh.diffCalls[0]).toEqual({ n: 43, args: [] });
   });
 
+  it("diff --stat on a PR falls back to the git path (gh pr diff has no --stat)", async () => {
+    await checkoutPr(45, "feature-x");
+    const gh = fakeGh({ 45: { state: "OPEN" } });
+    const r = await ghEnv(gh).run(["--dry-run", "n8n", "45", "diff", "--stat"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("git -C");
+    expect(r.stdout).toContain("--stat");
+    expect(r.stdout).not.toContain("gh pr diff");
+    expect(gh.diffCalls).toHaveLength(0);
+  });
+
+  it("diff with git-only passthrough args on a PR uses the git path", async () => {
+    await checkoutPr(46, "feature-x");
+    const gh = fakeGh({ 46: { state: "OPEN" } });
+    const r = await ghEnv(gh).run(["--dry-run", "n8n", "46", "diff", "--", "--color-words"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain("--color-words");
+    expect(r.stdout).not.toContain("gh pr diff");
+    expect(gh.diffCalls).toHaveLength(0);
+  });
+
   it("clean --closed removes a PR whose gh state is CLOSED", async () => {
     await checkoutPr(44, "feature-x");
     const r = await ghEnv(fakeGh({ 44: { state: "CLOSED" } })).run(["n8n", "clean", "--closed", "--yes"]);
@@ -149,6 +176,58 @@ describe("§9.7 diff — git path", () => {
     expect(r.stdout).toContain("git -C");
     expect(r.stdout).toContain(path);
     expect(r.stdout).toContain("diff");
+  });
+});
+
+describe("§8.1 PR re-fetch into a checked-out branch", () => {
+  it("checkout --fetch fast-forwards the pr/<n> worktree without erroring", async () => {
+    origin.makePr(70, "feature-x");
+    const co = await env.run(["n8n", "70", "checkout"]);
+    expect(co.code).toBe(0);
+    const path = co.stdout.trim();
+    const before = headSha(path);
+
+    // A new commit lands on the PR head upstream.
+    origin.commit("feature-x", { "feat.txt": "hello again\n" });
+    origin.makePr(70, "feature-x");
+
+    const r = await env.run(["n8n", "70", "checkout", "--fetch"]);
+    expect(r.code).toBe(0); // regression: previously exit 5 (refusing to fetch into checked-out branch)
+    expect(headSha(path)).not.toBe(before);
+    expect(readFileSync(join(path, "feat.txt"), "utf8")).toBe("hello again\n");
+  });
+
+  it("sync hard-resets a PR workspace to the latest head", async () => {
+    origin.makePr(71, "feature-x");
+    const co = await env.run(["n8n", "71", "checkout"]);
+    expect(co.code).toBe(0);
+    const path = co.stdout.trim();
+    const before = headSha(path);
+
+    origin.commit("feature-x", { "feat.txt": "v2\n" });
+    origin.makePr(71, "feature-x");
+
+    const r = await env.run(["n8n", "71", "sync"]);
+    expect(r.code).toBe(0);
+    expect(headSha(path)).not.toBe(before);
+    expect(readFileSync(join(path, "feat.txt"), "utf8")).toBe("v2\n");
+  });
+});
+
+describe("§9.12 config add alias", () => {
+  it("`config add` resolves identically to `config edit`", async () => {
+    const add = await env.run(["--dry-run", "config", "add", "n8n"]);
+    const edit = await env.run(["--dry-run", "config", "edit", "n8n"]);
+    expect(add.code).toBe(0);
+    expect(add.stdout.trim().length).toBeGreaterThan(0);
+    expect(add.stdout).toContain("n8n.toml");
+    expect(add.stdout).toBe(edit.stdout); // same editor launch argv
+  });
+
+  it("an unknown subcommand still lists add in the hint", async () => {
+    const r = await env.run(["config", "frobnicate"]);
+    expect(r.code).not.toBe(0);
+    expect(r.stderr).toContain("path | edit | add | validate");
   });
 });
 

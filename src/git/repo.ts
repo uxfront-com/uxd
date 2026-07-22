@@ -101,6 +101,38 @@ export async function fetchPr(g: GitEnv, n: number): Promise<void> {
 }
 
 /**
+ * Fetch a PR head into the worktree's FETCH_HEAD *without* updating the local
+ * `pr/<n>` branch ref (§7.2). Git refuses to fetch straight into
+ * `refs/heads/pr/<n>` while that branch is checked out; fetching to FETCH_HEAD
+ * sidesteps that so callers can fast-forward (`refetchPr`) or hard-reset (`sync`).
+ */
+export async function fetchPrHead(g: GitEnv, worktreeDir: string, n: number): Promise<void> {
+  g.log.step(`fetching pull/${n}`);
+  const res = await runGit(
+    g,
+    ["git", "-C", worktreeDir, "fetch", "origin", `refs/pull/${n}/head`, "--no-tags"],
+    { allowFailure: true },
+  );
+  if (res.code !== 0) throw classifyFetchError(res.stderr, `PR #${n}`);
+}
+
+/**
+ * Re-fetch a PR on the fast path when its `pr/<n>` branch is already checked out
+ * (§8.1). Fetches to FETCH_HEAD (see `fetchPrHead`) then fast-forwards the
+ * worktree. A non-fast-forward (diverged / force-pushed PR) is left in place
+ * with a warning — `sync` is the tool that hard-resets.
+ */
+export async function refetchPr(g: GitEnv, worktreeDir: string, n: number): Promise<void> {
+  await fetchPrHead(g, worktreeDir, n);
+  const ff = await runGit(g, ["git", "-C", worktreeDir, "merge", "--ff-only", "FETCH_HEAD"], {
+    allowFailure: true,
+  });
+  if (!g.dryRun && ff.code !== 0) {
+    g.log.warn(`pr/${n} did not fast-forward (diverged or force-pushed) — run \`sync\` to reset it`);
+  }
+}
+
+/**
  * Ensure a commit object is present locally, fetching it from origin if the
  * partial clone hasn't materialized it yet (§6.2, §7.2). A commit already on a
  * fetched branch is present after the init fetch and needs no network.
