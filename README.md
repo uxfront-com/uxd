@@ -1,4 +1,4 @@
-# uxd
+# uxd — unpack, execute, debug
 
 Materialize any git ref of a configured project into an isolated, runnable local workspace with one command.
 
