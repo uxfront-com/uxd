@@ -494,7 +494,7 @@ Unknown `version` → exit 3 with an upgrade hint. Entries whose `path` no longe
 `runSetup(ws)`:
 
 1. **Seed.** For each entry in `setup.seed_files` (validated: relative, no `..`): if `<worktree>/<rel>` already exists, skip (never overwrite). Otherwise copy from the first source that has it: `<config-dir>/seeds/<project>/<rel>` → `setup.seed_from/<rel>`. Neither has it → warn once, continue. `--reseed` deletes the targets first.
-2. **Hash.** Expand `setup.cache_key` globs (via `Bun.Glob`, sorted, relative to worktree; excluded: anything under `node_modules/` or `.git/`); `setupHash = sha256(concat(relpath, "\\0", file bytes, "\\0") …)`.
+2. **Hash.** Expand `setup.cache_key` globs (via `tinyglobby`, sorted, relative to worktree; excluded: anything under `node_modules/` or `.git/`); `setupHash = sha256(concat(relpath, "\\0", file bytes, "\\0") …)`.
 3. **Install.** If `setup.run` is set and `setupHash !== ws.setupHash`: run it (`bash -c`, cwd = worktree, env = composed env §11.2, stdio inherited). Success → persist new hash. Failure → exit 6 and leave the old hash so the next attempt retries.
 4. `pre_run` hook, when the caller is `run`/`exec`/`shell`.
 
@@ -648,7 +648,10 @@ Custom templates run via `bash -c` with `{path}` substituted **shell-escaped**; 
 
 ### 11.1 `lib/proc.ts` contract
 
-Exactly two spawn modes, both argv-based on `Bun.spawn`:
+Exactly two spawn modes, both argv-based on `node:child_process`. Note: Node
+reports a missing executable as an async `error` event (ENOENT), not a sync
+throw, so `capture`/passthrough map that to the setup/external error contract
+below rather than relying on a synchronous failure:
 
 - `capture(argv, { cwd, env }): { code, stdout, stderr }` — for git/gh plumbing. Non-zero exit throws `UxdError(E_GIT | E_EXTERNAL)` carrying trimmed stderr; callers that expect failure pass `{ allowFailure: true }`.
 - `passthrough(argv, { cwd, env, detach? }): exitCode` — stdio inherited (or detached per §10); used by run/exec/shell/editor/hooks/setup. Installs SIGINT/SIGTERM forwarding to the child process group for the duration.
@@ -715,8 +718,8 @@ Four hooks, all optional strings run via `bash -c`, cwd = worktree, env = §11.2
 
 ```
 uxd/
-  package.json            # "bin": { "uxd": "./bin/uxd.ts" }, scripts: dev/test/build/compile
-  bin/uxd.ts              # #!/usr/bin/env bun → imports src/main.ts (`.ts` so `bun build --compile` loads it)
+  package.json            # "bin": { "uxd": "./dist/bin/uxd.js" }, scripts: dev/test/build (tsc)
+  bin/uxd.ts              # source entry → imports src/main.ts; compiled to dist/bin/uxd.js (#!/usr/bin/env node)
   tsconfig.json           # strict: true, noUncheckedIndexedAccess: true
   DESIGN.md               # this file
   src/
@@ -821,20 +824,25 @@ argv ─▶ cli/parse ─▶ config/load ─▶ commands/<verb>
 
 | Concern | Choice | Rationale |
 |---|---|---|
-| Runtime | **Bun ≥ 1.1** (TypeScript, no build step in dev) | iteration speed on a personal tool; `Bun.spawn`, `Bun.Glob`, `Bun.file` cover proc/glob/fs needs; `bun build --compile` gives a single binary if the tool spreads to the team. Node compatibility is a non-goal. |
-| CLI parsing | **hand-rolled** (§4.3) over `node:util` `parseArgs` tokens | the grammar is positional and context-dependent (dynamic project names, freeform refs, verb-position rules); frameworks fight this. ~150 lines, table-driven tests. |
+| Runtime | **Node ≥ 18** (TypeScript compiled to JS via `tsc`; the published bin is `dist/bin/uxd.js`) | universal availability with no Bun prerequisite; Node stdlib (`node:child_process`, `node:net`, `fs/promises`) plus `tinyglobby` cover proc/glob/fs needs. Superseded the original Bun runtime — see **ADR-002**. |
+| CLI parsing | **hand-rolled** (§4.3) over `node:util` `parseArgs` tokens | the grammar is positional and context-dependent (dynamic project names, freeform refs, verb-position rules); frameworks fight this. ~150 lines, table-driven tests. See ADR-001. |
 | TOML | `smol-toml` | small, spec-complete, typed. |
 | Validation | `zod` | schema + inferred types + good error paths for §5.4's aggregate reporting. |
 | Colors | `picocolors` | tiny; no chalk. |
-| Everything else | stdlib / Bun built-ins | no execa (proc.ts is 60 lines on `Bun.spawn`), no glob dep, no table dep (pad columns manually), no libgit2. |
+| Glob | `tinyglobby` | Node has no built-in glob at the ≥18 floor (`fs.glob` is Node ≥22); replaces the former `Bun.Glob`. |
+| Everything else | stdlib (Node built-ins) | no execa (proc.ts is a thin layer on `node:child_process`), no table dep (pad columns manually), no libgit2. |
 
-Runtime dependency budget: those three packages. Treat additions as design changes.
+Runtime dependency budget: those **four** packages (`smol-toml`, `zod`, `picocolors`, `tinyglobby`). Treat additions as design changes (see ADR-001's amendment clause; the `tinyglobby` addition was authorized by ADR-002).
+
+> **Note (ADR-002, 2026-07-22):** the runtime moved from Bun to compiled Node.
+> The standalone `bun build --compile` single-file binary was dropped (Node's
+> SEA has no clean parity — deferred). The npm bin is the sole install path.
 
 ---
 
 ## 17. Testing strategy
 
-Runner: `bun test`. `gh` is never invoked in tests — `GhClient` is injected (`fakeGh(fixtures)` / `unavailableGh`).
+Runner: `vitest` (was `bun test`; see ADR-002). `gh` is never invoked in tests — `GhClient` is injected (`fakeGh(fixtures)` / `unavailableGh`).
 
 ### 17.1 Unit (pure, fast)
 

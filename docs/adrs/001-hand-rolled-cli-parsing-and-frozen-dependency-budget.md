@@ -2,6 +2,7 @@
 Date: 2026-07-21 · Status: Accepted
 Deciders: Operator (alex) · Informed by: DESIGN.md §16, UXF-34 M0 review
 Supersedes: — · Superseded by: —
+Amended by: ADR-002 (dependency budget three → four: `tinyglobby` added for the Node glob replacement; the hand-rolled-parsing decision is unaffected)
 
 ## Context
 
