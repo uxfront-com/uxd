@@ -17,7 +17,7 @@ beforeEach(() => {
   origin = makeFixtureOrigin(tmp);
   origin.commit("main", { "README.md": "# fixture\n" });
   origin.commit("feature-x", { "feat.txt": "hello\n" });
-  env = makeEnv(tmp, { n8n: { repo: origin.url, defaultBranch: "main" } });
+  env = makeEnv(tmp, { "my-project": { repo: origin.url, defaultBranch: "main" } });
 });
 
 afterEach(() => {
@@ -26,14 +26,14 @@ afterEach(() => {
 });
 
 function state(): { workspaces: Record<string, { slug: string; adopted?: boolean }> } {
-  const file = join(env.stateHome, "uxd", "n8n.json");
+  const file = join(env.stateHome, "uxd", "my-project.json");
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
 function branchExists(name: string): boolean {
   const res = spawnSync(
     "git",
-    ["-C", env.repoPath("n8n"), "rev-parse", "--verify", `refs/heads/${name}`],
+    ["-C", env.repoPath("my-project"), "rev-parse", "--verify", `refs/heads/${name}`],
   );
   return res.status === 0;
 }
@@ -41,17 +41,17 @@ function branchExists(name: string): boolean {
 describe("§17.2 scenario 7 — clean --merged", () => {
   it("plans and removes a merged PR workspace: worktree, branch, data, state", async () => {
     origin.makePr(50, "feature-x");
-    const co = await env.run(["n8n", "50", "checkout"]);
+    const co = await env.run(["my-project", "50", "checkout"]);
     expect(co.code).toBe(0);
     const path = co.stdout.trim();
-    const dataDir = join(env.worktreesPath("n8n"), ".data", "pr-50");
+    const dataDir = join(env.worktreesPath("my-project"), ".data", "pr-50");
     expect(existsSync(path)).toBe(true);
     expect(branchExists("pr/50")).toBe(true);
 
     // Merge the PR head into the default branch on origin.
     origin.merge("main", "feature-x");
 
-    const r = await env.run(["n8n", "clean", "--merged", "--yes"]);
+    const r = await env.run(["my-project", "clean", "--merged", "--yes"]);
     expect(r.code).toBe(0);
     expect(r.stderr).toContain("pr-50");
     expect(r.stderr).toContain("merged");
@@ -63,8 +63,8 @@ describe("§17.2 scenario 7 — clean --merged", () => {
   });
 
   it("reports nothing to remove when no branch is merged", async () => {
-    await env.run(["n8n", "feature-x", "checkout"]);
-    const r = await env.run(["n8n", "clean", "--merged", "--yes"]);
+    await env.run(["my-project", "feature-x", "checkout"]);
+    const r = await env.run(["my-project", "clean", "--merged", "--yes"]);
     expect(r.code).toBe(0);
     expect(r.stderr).toContain("nothing to remove");
     expect(state().workspaces["feature-x"]).toBeDefined();
@@ -84,7 +84,7 @@ describe("§17.2 scenario 8 — adopted path ref", () => {
     g(["commit", "-m", "init"]);
 
     // exec runs in the adopted dir; the touch proves the cwd.
-    const r = await env.run(["n8n", "--path", adopted, "exec", "--", "touch", "marker"]);
+    const r = await env.run(["my-project", "--path", adopted, "exec", "--", "touch", "marker"]);
     expect(r.code).toBe(0);
     expect(existsSync(join(adopted, "marker"))).toBe(true);
 
@@ -94,7 +94,7 @@ describe("§17.2 scenario 8 — adopted path ref", () => {
 
     // rm removes the workspace record but never the adopted directory.
     const slug = entry!.slug;
-    const rm = await env.run(["n8n", "--path", adopted, "rm", "--yes"]);
+    const rm = await env.run(["my-project", "--path", adopted, "rm", "--yes"]);
     expect(rm.code).toBe(0);
     expect(existsSync(adopted)).toBe(true);
     expect(existsSync(join(adopted, "marker"))).toBe(true);
