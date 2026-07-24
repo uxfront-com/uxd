@@ -52,6 +52,7 @@ PROJECT VERBS
   clean               remove workspaces (explicit slugs or --all)
 
 TOP-LEVEL VERBS
+  setup               create the config dir and scaffold your first project
   projects            list configured projects
   doctor              diagnose environment & configs
   config              path | edit [project] | add [project] | validate [project]

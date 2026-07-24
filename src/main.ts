@@ -28,6 +28,7 @@ import { clean, rm } from "./commands/clean.ts";
 import { projects } from "./commands/projects.ts";
 import { doctor } from "./commands/doctor.ts";
 import { config } from "./commands/config.ts";
+import { setup } from "./commands/setup.ts";
 import { run, exec, shell } from "./commands/process.ts";
 import { sync } from "./commands/sync.ts";
 import { diff } from "./commands/diff.ts";
@@ -154,6 +155,8 @@ function isExemptFromConfigDir(result: ParseResult): boolean {
   if (result.kind !== "top") return false;
   if (result.verb === "help" || result.verb === "version" || result.verb === "doctor") return true;
   if (result.verb === "completions") return true;
+  // `setup` creates the config dir, so it must run when the dir is still absent.
+  if (result.verb === "setup") return true;
   // `config path` is exempt; `config edit/validate` are not.
   if (result.verb === "config") {
     const sub = result.args[0];
@@ -179,6 +182,8 @@ async function dispatch(result: ParseResult, ctx: Ctx, defaults: Defaults): Prom
         return doctor({ ctx, args: result.args });
       case "config":
         return config({ ctx, args: result.args });
+      case "setup":
+        return setup({ ctx, args: result.args });
       case "completions":
         return completions({ ctx, args: result.args });
     }
