@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import {
@@ -147,6 +147,115 @@ describe("validateAll & defaults", () => {
     expect(bp).toBeGreaterThanOrEqual(3000);
     expect(bp).toBeLessThanOrEqual(6900);
     expect((bp - 3000) % 100).toBe(0);
+  });
+});
+
+describe("loadProject — extends (§5.4.1)", () => {
+  // Write a repo-committed base file under <dir>/repo/.uxd.toml and return its path.
+  const writeBase = (body: string): string => {
+    const repoDir = join(dir, "repo");
+    mkdirSync(repoDir, { recursive: true });
+    const p = join(repoDir, ".uxd.toml");
+    writeFileSync(p, body);
+    return p;
+  };
+
+  it("merges base under local overrides; local wins on scalars", () => {
+    const base = writeBase(
+      [
+        `repo = "git@github.com:x/app.git"`,
+        `repo_path = "/base/repo"`,
+        `worktrees_path = "/base/trees"`,
+        `ports = 2`,
+        `[commands.dev]`,
+        `run = "pnpm dev"`,
+      ].join("\n"),
+    );
+    write(
+      "app.toml",
+      [`extends = ${JSON.stringify(base)}`, `repo_path = "/local/repo"`, `ports = 5`, `editor = "zed"`].join("\n"),
+    );
+    const p = loadProject(dir, "app", {});
+    expect(p.repo).toBe("git@github.com:x/app.git"); // from base
+    expect(p.repoPath).toBe("/local/repo"); // local override
+    expect(p.worktreesPath).toBe("/base/trees"); // from base
+    expect(p.ports).toBe(5); // local scalar wins
+    expect(p.editor).toBe("zed"); // local-only key
+    expect(p.commands.dev).toEqual({ run: "pnpm dev", cwd: undefined, env: {} }); // from base
+  });
+
+  it("merges tables key-by-key (env), local wins per key", () => {
+    const base = writeBase(
+      [
+        `repo = "x"`,
+        `repo_path = "/r"`,
+        `worktrees_path = "/t"`,
+        `[env]`,
+        `A = "1"`,
+        `B = "2"`,
+      ].join("\n"),
+    );
+    write("app.toml", [`extends = ${JSON.stringify(base)}`, `[env]`, `B = "3"`, `C = "4"`].join("\n"));
+    const p = loadProject(dir, "app", {});
+    expect(p.env).toEqual({ A: "1", B: "3", C: "4" });
+  });
+
+  it("replaces arrays wholesale (setup.seed_files)", () => {
+    const base = writeBase(
+      [
+        `repo = "x"`,
+        `repo_path = "/r"`,
+        `worktrees_path = "/t"`,
+        `[setup]`,
+        `seed_files = [".env.a", ".env.b"]`,
+      ].join("\n"),
+    );
+    write("app.toml", [`extends = ${JSON.stringify(base)}`, `[setup]`, `seed_files = [".env.c"]`].join("\n"));
+    const p = loadProject(dir, "app", {});
+    expect(p.setup.seedFiles).toEqual([".env.c"]);
+  });
+
+  it("resolves a relative extends path against the config dir", () => {
+    writeBase(`repo = "x"\nrepo_path = "/r"\nworktrees_path = "/t"\n`);
+    write("app.toml", `extends = "repo/.uxd.toml"\n`);
+    const p = loadProject(dir, "app", {});
+    expect(p.repo).toBe("x");
+  });
+
+  it("missing extends target fails E_CONFIG on the extends key", () => {
+    write("app.toml", `extends = "repo/nope.toml"\n`);
+    try {
+      loadProject(dir, "app", {});
+      throw new Error("expected throw");
+    } catch (e) {
+      expect(e).toBeInstanceOf(ConfigValidationError);
+      const err = e as ConfigValidationError;
+      expect(err.errCode).toBe("E_CONFIG");
+      expect(err.issues.some((i) => i.path === "extends")).toBe(true);
+    }
+  });
+
+  it("rejects a nested extends in the base (single level only)", () => {
+    const base = writeBase(`extends = "other.toml"\nrepo = "x"\nrepo_path = "/r"\nworktrees_path = "/t"\n`);
+    write("app.toml", `extends = ${JSON.stringify(base)}\n`);
+    try {
+      loadProject(dir, "app", {});
+      throw new Error("expected throw");
+    } catch (e) {
+      const err = e as ConfigValidationError;
+      expect(err.issues.some((i) => /nested extends/.test(i.message))).toBe(true);
+    }
+  });
+
+  it("rejects a self-referential extends", () => {
+    write("app.toml", `extends = "app.toml"\nrepo = "x"\n`);
+    try {
+      loadProject(dir, "app", {});
+      throw new Error("expected throw");
+    } catch (e) {
+      const err = e as ConfigValidationError;
+      expect(err.issues.some((i) => /cannot extend itself/.test(i.message))).toBe(true);
+    }
   });
 });
 

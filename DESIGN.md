@@ -266,6 +266,7 @@ Field reference:
 
 | Key | Type | Required | Default | Notes |
 |---|---|---|---|---|
+| `extends` | path | no | — | Reference to a repo-committed base config; this file overrides it. Single level. See §5.4.1. |
 | `repo` | string | **yes** | — | Clone URL. Used for URL-form project inference. |
 | `repo_path` | path | no | `{root}/{project}/repo` | Error if neither this nor `defaults.root` is set. |
 | `worktrees_path` | path | no | `{root}/{project}/trees` | Same rule. Must not be inside `repo_path`. |
@@ -283,6 +284,54 @@ Field reference:
 | `hooks.*` | string | no | — | Only the four names in §12. |
 
 Path values support leading `~` expansion only (no env-var interpolation). Validation is aggregate: report *all* schema errors for a file at once, each as `n8n.toml: commands.dev.run: expected string, got number`, then exit 3.
+
+### 5.4.1 Local project config references (`extends`)
+
+A project file may commit its shared configuration inside the repository it
+describes and reference it from the config dir with `extends`. The referenced
+file is the **base**; the config-dir file's own keys **override** it. Effective
+precedence, lowest to highest:
+
+```
+defaults.toml  <  extends base (repo-committed)  <  local project file
+```
+
+This keeps the shared truth (setup, commands, ports, hooks) in the repo while
+machine-specific paths and secrets stay in the local file, out of version
+control.
+
+```toml
+# ~/.uxd/n8n.toml — local pointer
+extends = "~/dev/n8n/.uxd.toml"     # stable clone, never a worktree
+repo_path = "~/dev/uxd/n8n/repo"    # machine-specific override
+[env]
+N8N_LICENSE_KEY = "..."             # secret stays local
+```
+
+Merge rules:
+
+- **Scalars** — the local file replaces the base.
+- **Tables** (`env`, `commands`, `hooks`, `setup`, nested `commands.<name>`) —
+  merged key-by-key; the local value wins per key.
+- **Arrays** (`setup.seed_files`, `setup.cache_key`) — the local file replaces
+  the base array wholesale.
+
+The merged result is validated by the same strict schema and runs through the
+same path/port derivation, so every rule in §5.4 applies to the effective
+config.
+
+Rules and failure modes (all `E_CONFIG`, exit 3):
+
+- `extends` is a filesystem path with leading `~` expansion; relative paths are
+  anchored to the config dir. It must point at a stable clone, not a throwaway
+  worktree.
+- **Single level only** — the referenced base file may not itself set `extends`
+  (this also makes cycles impossible); a self-reference is rejected.
+- Referenced file missing/unreadable, a TOML parse error in the base, a nested
+  `extends`, or a self-reference each fail with the offending file labeled.
+
+`uxd config link <name> --from <path>` scaffolds a pointer file for an existing
+repo config and validates the merged result (§9.12).
 
 ### 5.5 Template variables
 
@@ -618,7 +667,7 @@ Runs the checks below; each prints `ok` / `warn` / `fail` + one-line detail to s
 
 ### 9.12 `config`
 
-`config path` → print config dir (stdout). `config edit [project]` (alias `config add [project]`) → open `<project>.toml` (or the dir) in `$EDITOR`/project editor. `config validate [project]` → run schema validation for one/all projects, report per §5.4, exit 3 on any error.
+`config path` → print config dir (stdout). `config edit [project]` (alias `config add [project]`) → open `<project>.toml` (or the dir) in `$EDITOR`/project editor. `config link <project> --from <path>` → scaffold a pointer file that `extends` a repo-committed config (§5.4.1), then validate the merged result (`--force` overwrites an existing file; `--dry-run` prints the pointer instead of writing). `config validate [project]` → run schema validation for one/all projects, report per §5.4, exit 3 on any error.
 
 ### 9.13 `completions <bash|zsh|fish>` (M2)
 
