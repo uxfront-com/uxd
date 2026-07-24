@@ -1,6 +1,7 @@
 // Integration-test fixtures (§17.2): a real bare-git origin + an in-process
 // harness that runs main() against tmp UXD_CONFIG_DIR / XDG_STATE_HOME.
 
+import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { main, unavailableGh } from "../src/main.ts";
@@ -15,13 +16,11 @@ const AUTHOR_ENV = {
 
 /** Run a git command synchronously; throws on non-zero with captured stderr. */
 function git(args: string[], cwd?: string): string {
-  const res = Bun.spawnSync(["git", ...args], {
+  const res = spawnSync("git", args, {
     cwd,
     env: { ...process.env, ...AUTHOR_ENV, GIT_TERMINAL_PROMPT: "0" } as Record<string, string>,
-    stdout: "pipe",
-    stderr: "pipe",
   });
-  if (res.exitCode !== 0) {
+  if (res.status !== 0) {
     throw new Error(`git ${args.join(" ")} failed: ${res.stderr.toString().trim()}`);
   }
   return res.stdout.toString();

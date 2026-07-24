@@ -1,5 +1,6 @@
-// Process execution: capture/passthrough on Bun.spawn (§11.1).
+// Process execution: capture/passthrough on node:child_process (§11.1).
 
+import { spawn } from "node:child_process";
 import { UxdError, type ErrCode } from "./errors.ts";
 
 // Optional recorder: when set, every spawned argv is recorded before execution.
@@ -30,26 +31,35 @@ export interface CaptureResult {
  */
 export async function capture(argv: string[], opts: CaptureOptions = {}): Promise<CaptureResult> {
   recorder?.(argv);
-  const proc = Bun.spawn(argv, {
-    cwd: opts.cwd,
-    env: opts.env ?? (process.env as Record<string, string>),
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
+  return await new Promise<CaptureResult>((resolve, reject) => {
+    const child = spawn(argv[0]!, argv.slice(1), {
+      cwd: opts.cwd,
+      env: opts.env ?? (process.env as Record<string, string>),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    child.stdout!.setEncoding("utf8");
+    child.stderr!.setEncoding("utf8");
+    child.stdout!.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    child.stderr!.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    child.on("error", (e) => reject(mapSpawnError(e, argv)));
+    child.on("close", (code, signal) => {
+      const exit = code ?? (signal ? 128 + signalNumber(signal) : 1);
+      if (exit !== 0 && !opts.allowFailure) {
+        const trimmed = stderr.trim() || stdout.trim() || `exited with code ${exit}`;
+        reject(new UxdError(opts.errCode ?? "E_EXTERNAL", `${argv[0]}: ${trimmed}`));
+        return;
+      }
+      resolve({ code: exit, stdout, stderr });
+    });
   });
-
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (code !== 0 && !opts.allowFailure) {
-    const trimmed = stderr.trim() || stdout.trim() || `exited with code ${code}`;
-    throw new UxdError(opts.errCode ?? "E_EXTERNAL", `${argv[0]}: ${trimmed}`);
-  }
-
-  return { code, stdout, stderr };
 }
 
 export interface PassthroughOptions {
@@ -67,47 +77,58 @@ export interface PassthroughOptions {
 export async function passthrough(argv: string[], opts: PassthroughOptions = {}): Promise<number> {
   recorder?.(argv);
   if (opts.detach) {
-    const proc = spawnOrThrow(argv, {
+    return await new Promise<number>((resolve, reject) => {
+      const child = spawn(argv[0]!, argv.slice(1), {
+        cwd: opts.cwd,
+        env: opts.env ?? (process.env as Record<string, string>),
+        stdio: "ignore",
+        detached: true,
+      });
+      child.once("error", (e) => reject(mapSpawnError(e, argv)));
+      child.once("spawn", () => {
+        child.unref();
+        resolve(0);
+      });
+    });
+  }
+
+  return await new Promise<number>((resolve, reject) => {
+    const child = spawn(argv[0]!, argv.slice(1), {
       cwd: opts.cwd,
       env: opts.env ?? (process.env as Record<string, string>),
-      stdin: "ignore",
-      stdout: "ignore",
-      stderr: "ignore",
+      stdio: "inherit",
     });
-    proc.unref();
-    return 0;
-  }
 
-  const proc = spawnOrThrow(argv, {
-    cwd: opts.cwd,
-    env: opts.env ?? (process.env as Record<string, string>),
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
+    const forward = (signal: NodeJS.Signals) => {
+      try {
+        child.kill(signal);
+      } catch {
+        // child already gone
+      }
+    };
+    const onSigint = () => forward("SIGINT");
+    const onSigterm = () => forward("SIGTERM");
+    process.on("SIGINT", onSigint);
+    process.on("SIGTERM", onSigterm);
+
+    const cleanup = () => {
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+    };
+
+    child.once("error", (e) => {
+      cleanup();
+      reject(mapSpawnError(e, argv));
+    });
+    child.once("exit", (code, signal) => {
+      cleanup();
+      if (signal) {
+        resolve(128 + signalNumber(signal));
+        return;
+      }
+      resolve(code ?? 0);
+    });
   });
-
-  const forward = (signal: NodeJS.Signals) => {
-    try {
-      proc.kill(signal);
-    } catch {
-      // child already gone
-    }
-  };
-  const onSigint = () => forward("SIGINT");
-  const onSigterm = () => forward("SIGTERM");
-  process.on("SIGINT", onSigint);
-  process.on("SIGTERM", onSigterm);
-
-  try {
-    const code = await proc.exited;
-    if (proc.signalCode) {
-      return 128 + signalNumber(proc.signalCode);
-    }
-    return code;
-  } finally {
-    process.off("SIGINT", onSigint);
-    process.off("SIGTERM", onSigterm);
-  }
 }
 
 const SIGNALS: Record<string, number> = { SIGINT: 2, SIGTERM: 15, SIGHUP: 1, SIGKILL: 9, SIGQUIT: 3 };
@@ -116,22 +137,16 @@ function signalNumber(sig: string): number {
 }
 
 /**
- * Spawn `argv`, mapping a missing-binary ENOENT to a clean E_SETUP instead of
- * letting the raw spawn error surface as E_INTERNAL (§14). The binary being
- * absent is an environment problem the user can fix, not an internal bug.
+ * Map a spawn failure to a clean UxdError. A missing binary (ENOENT) is an
+ * environment problem the user can fix, so it becomes E_SETUP with a hint
+ * instead of surfacing as E_INTERNAL (§14). node:child_process reports ENOENT
+ * asynchronously via the `error` event, unlike Bun's synchronous throw.
  */
-function spawnOrThrow<T extends Parameters<typeof Bun.spawn>[1]>(
-  argv: string[],
-  options: T,
-): ReturnType<typeof Bun.spawn> {
-  try {
-    return Bun.spawn(argv, options);
-  } catch (e) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new UxdError("E_SETUP", `command not found: ${argv[0]}`, {
-        hint: `ensure '${argv[0]}' is installed and on your PATH`,
-      });
-    }
-    throw e;
+function mapSpawnError(e: unknown, argv: string[]): UxdError {
+  if ((e as NodeJS.ErrnoException).code === "ENOENT") {
+    return new UxdError("E_SETUP", `command not found: ${argv[0]}`, {
+      hint: `ensure '${argv[0]}' is installed and on your PATH`,
+    });
   }
+  return new UxdError("E_EXTERNAL", `${argv[0]}: ${(e as Error).message}`);
 }

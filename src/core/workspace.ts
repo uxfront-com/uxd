@@ -146,7 +146,7 @@ async function materialize(
     if (!existsSync(abs)) throw resolveError(`path does not exist: ${abs}`);
     if (!(await isGitWorktree(abs))) throw resolveError(`not a git working tree: ${abs}`);
     const slug = baseSlug;
-    const ports = allocateFor(project, slug, existing);
+    const ports = await allocateFor(project, slug, existing);
     mkdirSync(dataDirFor(project, slug), { recursive: true });
     return {
       slug,
@@ -202,7 +202,7 @@ async function materialize(
     throw resolveError(`unresolved ref kind: ${spec.kind}`);
   }
 
-  const ports = allocateFor(project, slug, existing);
+  const ports = await allocateFor(project, slug, existing);
   mkdirSync(dataDirFor(project, slug), { recursive: true });
 
   const ws: Workspace = {
@@ -279,10 +279,10 @@ async function refetch(ctx: Ctx, project: ProjectConfig, ws: Workspace): Promise
   else if (ws.kind === "pr" && ws.number !== undefined) await refetchPr(g, ws.path, ws.number);
 }
 
-function allocateFor(project: ProjectConfig, slug: string, existing: Record<string, Workspace>): number[] {
+async function allocateFor(project: ProjectConfig, slug: string, existing: Record<string, Workspace>): Promise<number[]> {
   const reserved = new Set<number>();
   for (const w of Object.values(existing)) for (const p of w.ports) reserved.add(p);
-  return allocatePorts({
+  return await allocatePorts({
     slug,
     basePort: project.basePort,
     ports: project.ports,

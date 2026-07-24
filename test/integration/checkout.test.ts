@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -77,11 +78,11 @@ describe("§17.2 scenario 3 — checkout of a PR ref", () => {
     expect(existsSync(expectedPath)).toBe(true);
 
     // Local pr/42 branch materialized in the bare repo.
-    const branch = Bun.spawnSync(
-      ["git", "-C", env.repoPath("n8n"), "rev-parse", "--verify", "refs/heads/pr/42"],
-      { stdout: "pipe", stderr: "pipe" },
+    const branch = spawnSync(
+      "git",
+      ["-C", env.repoPath("n8n"), "rev-parse", "--verify", "refs/heads/pr/42"],
     );
-    expect(branch.exitCode).toBe(0);
+    expect(branch.status).toBe(0);
 
     const s = state("n8n");
     expect(s.workspaces["pr-42"]?.kind).toBe("pr");

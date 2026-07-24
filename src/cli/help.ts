@@ -1,17 +1,27 @@
 // Usage + version text (§4.4). Printed to stdout; always exit 0.
 
 import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export function version(): string {
-  // package.json sits two levels up from src/cli/.
-  const file = join(import.meta.dir, "..", "..", "package.json");
-  if (existsSync(file)) {
-    try {
-      return (JSON.parse(readFileSync(file, "utf8")) as { version?: string }).version ?? "0.0.0";
-    } catch {
-      // fall through
+  // Walk up from this module until we find uxd's own package.json. The relative
+  // depth differs between source (src/cli/) and the compiled build (dist/src/cli/),
+  // so resolve by identity rather than a fixed number of "..".
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const file = join(dir, "package.json");
+    if (existsSync(file)) {
+      try {
+        const pkg = JSON.parse(readFileSync(file, "utf8")) as { name?: string; version?: string };
+        if (pkg.name === "uxd") return pkg.version ?? "0.0.0";
+      } catch {
+        // unreadable/invalid; keep walking up
+      }
     }
+    const parent = dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
   }
   return "0.0.0";
 }

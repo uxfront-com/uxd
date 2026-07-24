@@ -1,8 +1,10 @@
 // Setup pipeline (§8.4): seed files → cache-key hash → cached install → pre_run.
 
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { dirname, isAbsolute, join } from "node:path";
+import { glob } from "tinyglobby";
 import { configError, setupError } from "../lib/errors.ts";
 import { expandTilde } from "../lib/paths.ts";
 import { passthrough } from "../lib/proc.ts";
@@ -101,8 +103,8 @@ function assertSafeRelative(rel: string): void {
 export async function computeSetupHash(worktree: string, globs: string[]): Promise<string> {
   const matched = new Set<string>();
   for (const pattern of globs) {
-    const glob = new Bun.Glob(pattern);
-    for await (const rel of glob.scan({ cwd: worktree, dot: true, onlyFiles: true })) {
+    const entries = await glob(pattern, { cwd: worktree, dot: true, onlyFiles: true });
+    for (const rel of entries) {
       const segments = rel.split("/");
       if (segments.includes("node_modules") || segments.includes(".git")) continue;
       matched.add(rel);
@@ -111,10 +113,10 @@ export async function computeSetupHash(worktree: string, globs: string[]): Promi
 
   const hash = createHash("sha256");
   for (const rel of [...matched].sort()) {
-    const bytes = await Bun.file(join(worktree, rel)).arrayBuffer();
+    const bytes = await readFile(join(worktree, rel));
     hash.update(rel);
     hash.update("\0");
-    hash.update(Buffer.from(bytes));
+    hash.update(bytes);
     hash.update("\0");
   }
   return hash.digest("hex");
