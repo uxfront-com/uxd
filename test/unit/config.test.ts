@@ -5,11 +5,13 @@ import { homedir, tmpdir } from "node:os";
 import {
   ConfigValidationError,
   deriveBasePort,
+  isValidProjectName,
   loadDefaults,
   loadProject,
   validateAll,
 } from "../../src/config/load.ts";
 import { defaultConfigDir } from "../../src/lib/paths.ts";
+import { defaultProjectTemplate } from "../../src/lib/project-template.ts";
 
 let dir: string;
 
@@ -147,6 +149,46 @@ describe("validateAll & defaults", () => {
     expect(bp).toBeGreaterThanOrEqual(3000);
     expect(bp).toBeLessThanOrEqual(6900);
     expect((bp - 3000) % 100).toBe(0);
+  });
+});
+
+describe("defaultProjectTemplate — §9.12 seed", () => {
+  it("leaves only `repo` uncommented; every other line is a comment (AC5)", () => {
+    const lines = defaultProjectTemplate("acme")
+      .split("\n")
+      .filter((l) => l.trim() !== "");
+    const active = lines.filter((l) => !l.trimStart().startsWith("#"));
+    expect(active).toEqual([`repo = "git@github.com:ORG/REPO.git"   # required`]);
+  });
+
+  it("validates clean after replacing the placeholder repo, deriving paths from root (AC5/AC6)", () => {
+    write("defaults.toml", `root = "/data/uxd"\n`);
+    const seeded = defaultProjectTemplate("acme").replace(
+      "git@github.com:ORG/REPO.git",
+      "git@github.com:acme/app.git",
+    );
+    write("acme.toml", seeded);
+    const p = loadProject(dir, "acme", loadDefaults(dir));
+    expect(p.repo).toBe("git@github.com:acme/app.git");
+    // Paths are not hardcoded in the template; they derive from defaults.root (AC6).
+    expect(p.repoPath).toBe("/data/uxd/acme/repo");
+    expect(p.worktreesPath).toBe("/data/uxd/acme/trees");
+  });
+
+  it("interpolates the project name into the header comment", () => {
+    expect(defaultProjectTemplate("my-proj")).toContain("uxd config validate my-proj");
+  });
+});
+
+describe("isValidProjectName — §5.1 guard", () => {
+  it("accepts legal names and rejects reserved / malformed ones (AC3)", () => {
+    expect(isValidProjectName("n8n")).toBe(true);
+    expect(isValidProjectName("my-proj.v2")).toBe(true);
+    expect(isValidProjectName("defaults")).toBe(false);
+    expect(isValidProjectName("seeds")).toBe(false);
+    expect(isValidProjectName("Bad_Name")).toBe(false);
+    expect(isValidProjectName("-leading")).toBe(false);
+    expect(isValidProjectName("../escape")).toBe(false);
   });
 });
 

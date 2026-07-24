@@ -302,7 +302,7 @@ uxd projects                                 # list configured projects
 uxd doctor                                   # diagnose environment & configs
 uxd config path                              # print the config dir
 uxd config edit [project]                    # edit defaults or a project file
-uxd config add [project]                     # alias of `config edit`
+uxd config add [project]                     # like `config edit`; seeds a starter template if the file is absent
 uxd config validate [project]                # validate all configs, or one
 uxd completions <bash|zsh|fish>              # print a completion script
 uxd help                                     # usage

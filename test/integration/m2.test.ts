@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { makeEnv, makeFixtureOrigin, fakeGh, type Harness } from "../fixtures.ts";
@@ -224,6 +224,78 @@ describe("§9.12 config add alias", () => {
     const r = await env.run(["config", "frobnicate"]);
     expect(r.code).not.toBe(0);
     expect(r.stderr).toContain("path | edit | add | validate");
+  });
+});
+
+describe("§9.12 config add — seed a template when the project is absent", () => {
+  // A no-op "editor" so non-dry-run runs write the file, then exit 0 without
+  // launching a real editor (which would inherit stdin and hang the test).
+  let prevEditor: string | undefined;
+  beforeEach(() => {
+    prevEditor = process.env.EDITOR;
+    process.env.EDITOR = "true";
+  });
+  afterEach(() => {
+    if (prevEditor === undefined) delete process.env.EDITOR;
+    else process.env.EDITOR = prevEditor;
+  });
+
+  it("AC1 — seeds the default template and warns for an absent file", async () => {
+    const r = await env.run(["config", "add", "fresh"]);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain("creating new project file");
+    const file = join(env.configDir, "fresh.toml");
+    expect(existsSync(file)).toBe(true);
+    const body = readFileSync(file, "utf8");
+    expect(body).toContain(`repo = "git@github.com:ORG/REPO.git"`);
+    expect(body).toContain("uxd config validate fresh");
+  });
+
+  it("AC2 — never seeds or warns for an existing file", async () => {
+    const file = join(env.configDir, "n8n.toml"); // seeded by the harness
+    const before = readFileSync(file, "utf8");
+    // --dry-run avoids launching n8n's configured editor; the seed branch is
+    // still exercised and must be skipped because the file already exists.
+    const r = await env.run(["--dry-run", "config", "add", "n8n"]);
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toContain("creating new project file");
+    expect(r.stdout).not.toContain(`repo = "git@github.com:ORG/REPO.git"`); // no template emitted
+    expect(readFileSync(file, "utf8")).toBe(before); // file untouched
+  });
+
+  it("AC3 — refuses a reserved or malformed name and writes nothing", async () => {
+    const reserved = await env.run(["config", "add", "defaults"]);
+    expect(reserved.code).toBe(2);
+    expect(reserved.stderr).toContain("invalid project name");
+    expect(existsSync(join(env.configDir, "defaults.toml"))).toBe(false);
+
+    const malformed = await env.run(["config", "add", "Bad_Name"]);
+    expect(malformed.code).toBe(2);
+    expect(existsSync(join(env.configDir, "Bad_Name.toml"))).toBe(false);
+  });
+
+  it("AC4 — --dry-run prints the template and editor argv but writes no file", async () => {
+    process.env.EDITOR = "vim"; // a path-bearing preset (never spawned under --dry-run)
+    const r = await env.run(["--dry-run", "config", "add", "ghost"]);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toContain(`repo = "git@github.com:ORG/REPO.git"`); // the template
+    expect(r.stdout).toContain("ghost.toml"); // the editor argv target
+    expect(existsSync(join(env.configDir, "ghost.toml"))).toBe(false);
+  });
+
+  it("AC5/AC6 — a seeded file validates once the placeholder repo is real", async () => {
+    const seed = await env.run(["config", "add", "acme"]);
+    expect(seed.code).toBe(0);
+
+    const file = join(env.configDir, "acme.toml");
+    const edited = readFileSync(file, "utf8").replace("git@github.com:ORG/REPO.git", origin.url);
+    writeFileSync(file, edited);
+    // Paths are omitted from the template; they resolve from defaults.root (AC6).
+    writeFileSync(join(env.configDir, "defaults.toml"), `root = ${JSON.stringify(join(tmp, "root"))}\n`);
+
+    const v = await env.run(["config", "validate", "acme"]);
+    expect(v.code).toBe(0);
+    expect(v.stderr).toContain("acme: ok");
   });
 });
 
