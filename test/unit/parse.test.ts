@@ -3,14 +3,14 @@ import { parse, type ParseDeps } from "../../src/cli/parse.ts";
 import { parseUrlInput } from "../../src/core/resolve.ts";
 
 const deps: ParseDeps = {
-  projectExists: (n) => n === "n8n" || n === "styleframe",
-  knownProjects: () => ["n8n", "styleframe"],
-  projectCommandNames: (p) => (p === "n8n" ? ["dev", "test"] : []),
+  projectExists: (n) => n === "my-project" || n === "styleframe",
+  knownProjects: () => ["my-project", "styleframe"],
+  projectCommandNames: (p) => (p === "my-project" ? ["dev", "test"] : []),
   projectDefaultCommand: () => "code",
   resolveUrlProject: (url) => {
     const parsed = parseUrlInput(url);
-    if (parsed && parsed.coords.owner === "n8n-io" && parsed.coords.repo === "n8n") {
-      return { project: "n8n", ref: parsed.ref };
+    if (parsed && parsed.coords.owner === "my-org" && parsed.coords.repo === "my-project") {
+      return { project: "my-project", ref: parsed.ref };
     }
     return null;
   },
@@ -20,21 +20,21 @@ const p = (argv: string[]) => parse(argv, deps);
 
 describe("parse — §4.4 canonical examples", () => {
   it("bare PR → default_command (code)", () => {
-    const r = p(["n8n", "19234"]);
+    const r = p(["my-project", "19234"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
-    expect(r.project).toBe("n8n");
+    expect(r.project).toBe("my-project");
     expect(r.ref).toEqual({ kind: "pr", number: 19234 });
     expect(r.verb).toBe("code");
   });
 
   it("explicit code verb", () => {
-    const r = p(["n8n", "19234", "code"]);
+    const r = p(["my-project", "19234", "code"]);
     expect(r.kind === "workspace" && r.verb).toBe("code");
   });
 
   it("pr/<n> run dev", () => {
-    const r = p(["n8n", "pr/19234", "run", "dev"]);
+    const r = p(["my-project", "pr/19234", "run", "dev"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "pr", number: 19234 });
@@ -43,7 +43,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("#<n> shell", () => {
-    const r = p(["n8n", "#19234", "shell"]);
+    const r = p(["my-project", "#19234", "shell"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "pr", number: 19234 });
@@ -51,7 +51,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("branch checkout", () => {
-    const r = p(["n8n", "ai/fix-canvas-drag", "checkout"]);
+    const r = p(["my-project", "ai/fix-canvas-drag", "checkout"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "branch", name: "ai/fix-canvas-drag" });
@@ -59,7 +59,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("command-name sugar → run", () => {
-    const r = p(["n8n", "ai/fix-canvas-drag", "dev"]);
+    const r = p(["my-project", "ai/fix-canvas-drag", "dev"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.verb).toBe("run");
@@ -68,7 +68,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("last-used ref '-'", () => {
-    const r = p(["n8n", "-", "run", "test"]);
+    const r = p(["my-project", "-", "run", "test"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "last" });
@@ -77,23 +77,23 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("adopt path ref", () => {
-    const r = p(["n8n", "~/agents/wt-3", "run", "test"]);
+    const r = p(["my-project", "~/agents/wt-3", "run", "test"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "path", path: "~/agents/wt-3" });
   });
 
   it("URL form — PR", () => {
-    const r = p(["https://github.com/n8n-io/n8n/pull/19234", "code"]);
+    const r = p(["https://github.com/my-org/my-project/pull/19234", "code"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
-    expect(r.project).toBe("n8n");
+    expect(r.project).toBe("my-project");
     expect(r.ref).toEqual({ kind: "pr", number: 19234 });
     expect(r.verb).toBe("code");
   });
 
   it("URL form — tree/branch", () => {
-    const r = p(["https://github.com/n8n-io/n8n/tree/ai/fix-canvas-drag", "diff"]);
+    const r = p(["https://github.com/my-org/my-project/tree/ai/fix-canvas-drag", "diff"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "branch", name: "ai/fix-canvas-drag" });
@@ -101,7 +101,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("exec with passthrough", () => {
-    const r = p(["n8n", "19234", "exec", "--", "pnpm", "why", "lodash"]);
+    const r = p(["my-project", "19234", "exec", "--", "pnpm", "why", "lodash"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.verb).toBe("exec");
@@ -109,7 +109,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("run dev with passthrough appended", () => {
-    const r = p(["n8n", "19234", "run", "dev", "--", "--host", "0.0.0.0"]);
+    const r = p(["my-project", "19234", "run", "dev", "--", "--host", "0.0.0.0"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.verb).toBe("run");
@@ -118,7 +118,7 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("list --json", () => {
-    const r = p(["n8n", "list", "--json"]);
+    const r = p(["my-project", "list", "--json"]);
     expect(r.kind).toBe("project");
     if (r.kind !== "project") return;
     expect(r.verb).toBe("list");
@@ -126,14 +126,14 @@ describe("parse — §4.4 canonical examples", () => {
   });
 
   it("bare project → list", () => {
-    const r = p(["n8n"]);
+    const r = p(["my-project"]);
     expect(r.kind).toBe("project");
     if (r.kind !== "project") return;
     expect(r.verb).toBe("list");
   });
 
   it("sync --fresh", () => {
-    const r = p(["n8n", "19234", "sync", "--fresh"]);
+    const r = p(["my-project", "19234", "sync", "--fresh"]);
     expect(r.kind === "workspace" && r.verb).toBe("sync");
     if (r.kind === "workspace") expect(r.args).toEqual(["--fresh"]);
   });
@@ -144,12 +144,12 @@ describe("parse — §4.4 canonical examples", () => {
     expect(d.kind === "top" && d.verb).toBe("doctor");
   });
 
-  it("config edit n8n", () => {
-    const r = p(["config", "edit", "n8n"]);
+  it("config edit my-project", () => {
+    const r = p(["config", "edit", "my-project"]);
     expect(r.kind).toBe("top");
     if (r.kind !== "top") return;
     expect(r.verb).toBe("config");
-    expect(r.args).toEqual(["edit", "n8n"]);
+    expect(r.args).toEqual(["edit", "my-project"]);
   });
 
   it("no args → help", () => {
@@ -160,12 +160,12 @@ describe("parse — §4.4 canonical examples", () => {
 
 describe("parse — global flags & disambiguators", () => {
   it("--dry-run anywhere before verb", () => {
-    const r = p(["--dry-run", "n8n", "19234", "checkout"]);
+    const r = p(["--dry-run", "my-project", "19234", "checkout"]);
     expect(r.global.dryRun).toBe(true);
   });
 
   it("--branch forces a numeric branch name", () => {
-    const r = p(["n8n", "--branch", "1234", "code"]);
+    const r = p(["my-project", "--branch", "1234", "code"]);
     expect(r.kind).toBe("workspace");
     if (r.kind !== "workspace") return;
     expect(r.ref).toEqual({ kind: "branch", name: "1234" });
@@ -173,7 +173,7 @@ describe("parse — global flags & disambiguators", () => {
   });
 
   it("--pr forces PR interpretation", () => {
-    const r = p(["n8n", "--pr", "42", "shell"]);
+    const r = p(["my-project", "--pr", "42", "shell"]);
     expect(r.kind === "workspace" && r.ref).toEqual({ kind: "pr", number: 42 });
   });
 });
@@ -184,11 +184,11 @@ describe("parse — error cases", () => {
   });
 
   it("unknown command throws (exit 2)", () => {
-    expect(() => p(["n8n", "main", "frobnicate"])).toThrow(/unknown command/);
+    expect(() => p(["my-project", "main", "frobnicate"])).toThrow(/unknown command/);
   });
 
   it("flag before command throws", () => {
-    expect(() => p(["--nope", "n8n"])).toThrow(/unexpected flag/);
+    expect(() => p(["--nope", "my-project"])).toThrow(/unexpected flag/);
   });
 
   it("URL with no matching project throws (exit 4)", () => {
@@ -196,6 +196,6 @@ describe("parse — error cases", () => {
   });
 
   it("two disambiguators throw", () => {
-    expect(() => p(["n8n", "--pr", "1", "--branch", "x", "code"])).toThrow(/only one ref disambiguator/);
+    expect(() => p(["my-project", "--pr", "1", "--branch", "x", "code"])).toThrow(/only one ref disambiguator/);
   });
 });

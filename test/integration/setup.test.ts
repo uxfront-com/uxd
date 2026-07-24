@@ -25,7 +25,7 @@ afterEach(() => {
 describe("§17.2 scenario 5 — setup.run cache", () => {
   it("installs once, skips on cache hit, re-runs when a cache_key file changes", async () => {
     const env: Harness = makeEnv(tmp, {
-      n8n: {
+      "my-project": {
         repo: origin.url,
         defaultBranch: "main",
         extraToml: [
@@ -39,20 +39,20 @@ describe("§17.2 scenario 5 — setup.run cache", () => {
       },
     });
 
-    const first = await env.run(["n8n", "feature-x", "run", "noop"]);
+    const first = await env.run(["my-project", "feature-x", "run", "noop"]);
     expect(first.code).toBe(0);
-    const path = join(env.worktreesPath("n8n"), "feature-x");
+    const path = join(env.worktreesPath("my-project"), "feature-x");
     expect(readFileSync(join(path, "ran.log"), "utf8").trim().split("\n").length).toBe(1);
 
     // Cache hit — install must not run again.
-    const second = await env.run(["n8n", "feature-x", "run", "noop"]);
+    const second = await env.run(["my-project", "feature-x", "run", "noop"]);
     expect(second.code).toBe(0);
     expect(second.stderr).toContain("cache hit");
     expect(readFileSync(join(path, "ran.log"), "utf8").trim().split("\n").length).toBe(1);
 
     // Change a cache_key file → the hash changes → install re-runs.
     writeFileSync(join(path, "feat.txt"), "edited\n");
-    const third = await env.run(["n8n", "feature-x", "run", "noop"]);
+    const third = await env.run(["my-project", "feature-x", "run", "noop"]);
     expect(third.code).toBe(0);
     expect(readFileSync(join(path, "ran.log"), "utf8").trim().split("\n").length).toBe(2);
   });
@@ -61,7 +61,7 @@ describe("§17.2 scenario 5 — setup.run cache", () => {
 describe("§17.2 scenario 6 — seeding", () => {
   it("seeds a missing file, never overwrites, and --reseed forces it", async () => {
     const env: Harness = makeEnv(tmp, {
-      n8n: {
+      "my-project": {
         repo: origin.url,
         defaultBranch: "main",
         extraToml: [
@@ -74,24 +74,24 @@ describe("§17.2 scenario 6 — seeding", () => {
       },
     });
     // Provide the seed source under <configDir>/seeds/<project>/.
-    const seedDir = join(env.configDir, "seeds", "n8n");
+    const seedDir = join(env.configDir, "seeds", "my-project");
     mkdirSync(seedDir, { recursive: true });
     writeFileSync(join(seedDir, "config.local"), "SEED\n");
 
-    const path = join(env.worktreesPath("n8n"), "feature-x");
+    const path = join(env.worktreesPath("my-project"), "feature-x");
 
-    const first = await env.run(["n8n", "feature-x", "run", "noop"]);
+    const first = await env.run(["my-project", "feature-x", "run", "noop"]);
     expect(first.code).toBe(0);
     expect(readFileSync(join(path, "config.local"), "utf8")).toBe("SEED\n");
 
     // A local edit is never clobbered by a plain re-run.
     writeFileSync(join(path, "config.local"), "EDITED\n");
-    const second = await env.run(["n8n", "feature-x", "run", "noop"]);
+    const second = await env.run(["my-project", "feature-x", "run", "noop"]);
     expect(second.code).toBe(0);
     expect(readFileSync(join(path, "config.local"), "utf8")).toBe("EDITED\n");
 
     // --reseed overwrites from source.
-    const third = await env.run(["n8n", "feature-x", "run", "--reseed", "noop"]);
+    const third = await env.run(["my-project", "feature-x", "run", "--reseed", "noop"]);
     expect(third.code).toBe(0);
     expect(readFileSync(join(path, "config.local"), "utf8")).toBe("SEED\n");
   });
@@ -100,7 +100,7 @@ describe("§17.2 scenario 6 — seeding", () => {
 describe("§17.2 scenario 9 — env composition (--dry-run)", () => {
   it("layers UXD_* < [env] < command env < --env, and exports UXD_PORT", async () => {
     const env: Harness = makeEnv(tmp, {
-      n8n: {
+      "my-project": {
         repo: origin.url,
         defaultBranch: "main",
         ports: 1,
@@ -119,7 +119,7 @@ describe("§17.2 scenario 9 — env composition (--dry-run)", () => {
     });
 
     // --dry-run prints the export lines deterministically (no child spawn).
-    const r = await env.run(["--dry-run", "n8n", "feature-x", "run", "dump", "--env", "FOO=flag"]);
+    const r = await env.run(["--dry-run", "my-project", "feature-x", "run", "dump", "--env", "FOO=flag"]);
     expect(r.code).toBe(0);
 
     const exported = new Map<string, string>();

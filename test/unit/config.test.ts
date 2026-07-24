@@ -26,26 +26,26 @@ describe("loadProject — valid fixture → ProjectConfig", () => {
   it("resolves explicit paths and defaults", () => {
     write("defaults.toml", `editor = "zed"\n`);
     write(
-      "n8n.toml",
+      "my-project.toml",
       [
-        `repo = "git@github.com:n8n-io/n8n.git"`,
-        `repo_path = "/srv/n8n/repo"`,
-        `worktrees_path = "/srv/n8n/trees"`,
+        `repo = "git@github.com:my-org/my-project.git"`,
+        `repo_path = "/srv/my-project/repo"`,
+        `worktrees_path = "/srv/my-project/trees"`,
         `default_branch = "master"`,
         `ports = 2`,
         `[commands.dev]`,
         `run = "pnpm dev"`,
       ].join("\n"),
     );
-    const p = loadProject(dir, "n8n", loadDefaults(dir));
-    expect(p.name).toBe("n8n");
-    expect(p.repo).toBe("git@github.com:n8n-io/n8n.git");
-    expect(p.repoPath).toBe("/srv/n8n/repo");
-    expect(p.worktreesPath).toBe("/srv/n8n/trees");
+    const p = loadProject(dir, "my-project", loadDefaults(dir));
+    expect(p.name).toBe("my-project");
+    expect(p.repo).toBe("git@github.com:my-org/my-project.git");
+    expect(p.repoPath).toBe("/srv/my-project/repo");
+    expect(p.worktreesPath).toBe("/srv/my-project/trees");
     expect(p.defaultBranch).toBe("master");
     expect(p.editor).toBe("zed"); // from defaults
     expect(p.ports).toBe(2);
-    expect(p.basePort).toBe(deriveBasePort("n8n")); // derived
+    expect(p.basePort).toBe(deriveBasePort("my-project")); // derived
     expect(p.commands.dev).toEqual({ run: "pnpm dev", cwd: undefined, env: {} });
     expect(p.defaultCommand).toBe("code"); // fallback
   });
@@ -143,7 +143,7 @@ describe("validateAll & defaults", () => {
   });
 
   it("deriveBasePort is in [3000, 6900] on the 100-step grid", () => {
-    const bp = deriveBasePort("n8n");
+    const bp = deriveBasePort("my-project");
     expect(bp).toBeGreaterThanOrEqual(3000);
     expect(bp).toBeLessThanOrEqual(6900);
     expect((bp - 3000) % 100).toBe(0);
