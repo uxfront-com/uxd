@@ -54,7 +54,7 @@ PROJECT VERBS
 TOP-LEVEL VERBS
   projects            list configured projects
   doctor              diagnose environment & configs
-  config              path | edit [project] | add [project] | link <project> --from <path> | validate [project]
+  config              path | edit [project] | add [project] | validate [project]
   completions         shell completions (M2)
   help                this text
   version             print version

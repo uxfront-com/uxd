@@ -291,7 +291,6 @@ uxd doctor                                   # diagnose environment & configs
 uxd config path                              # print the config dir
 uxd config edit [project]                    # edit defaults or a project file
 uxd config add [project]                     # alias of `config edit`
-uxd config link <project> --from <path>      # point a project at a repo-committed config
 uxd config validate [project]                # validate all configs, or one
 uxd completions <bash|zsh|fish>              # print a completion script
 uxd help                                     # usage
@@ -417,32 +416,6 @@ post_checkout = "echo 'workspace ready: {path}'"
 ```
 
 Path values support leading `~` expansion only. Validation is aggregate — `config validate` reports every schema error in a file at once.
-
-### Repo-committed config (`extends`)
-
-Commit the shared parts of a project's config inside the repo and point the
-config dir at it. The referenced file is the base; the local file overrides it,
-so machine-specific paths and secrets stay out of version control. Precedence:
-`defaults.toml` < the `extends` base < the local project file.
-
-```toml
-# ~/.uxd/my-project.toml — local pointer
-extends = "~/dev/my-project/.uxd.toml"   # a stable clone, not a throwaway worktree
-repo_path = "~/dev/uxd/my-project/repo"  # machine-specific override
-[env]
-LICENSE_KEY = "..."                      # secret stays local
-```
-
-Scaffold the pointer for an existing repo config:
-
-```bash
-uxd config link my-project --from ~/dev/my-project/.uxd.toml
-```
-
-Merge rules: scalars and arrays are replaced by the local file; tables (`env`,
-`commands`, `hooks`, `setup`) merge key-by-key with the local value winning.
-`extends` is single-level — the referenced file may not itself `extends` — and
-a missing or self-referential target is a config error.
 
 ### Template variables
 
