@@ -48,19 +48,19 @@ paths and secrets stay local and out of the repo.
 
 ### Example
 
-`~/.uxd/n8n.toml` (local pointer, machine-specific bits + secrets):
+`~/.uxd/my-project.toml` (local pointer, machine-specific bits + secrets):
 
 ```toml
-extends = "~/dev/n8n/.uxd.toml"   # stable clone, not a worktree
-repo_path = "~/dev/uxd/n8n/repo"  # local override
+extends = "~/dev/my-project/.uxd.toml"   # stable clone, not a worktree
+repo_path = "~/dev/uxd/my-project/repo"  # local override
 [env]
-N8N_LICENSE_KEY = "..."           # secret stays local
+MY_PROJECT_LICENSE_KEY = "..."           # secret stays local
 ```
 
-`~/dev/n8n/.uxd.toml` (committed in the repo, shared truth):
+`~/dev/my-project/.uxd.toml` (committed in the repo, shared truth):
 
 ```toml
-repo = "git@github.com:n8n-io/n8n.git"
+repo = "git@github.com:my-org/my-project.git"
 ports = 2
 [setup]
 run = "pnpm install --frozen-lockfile"
@@ -114,7 +114,7 @@ complicates name resolution and collisions.
 Rejected: breaks name-from-anywhere invocation and central worktree/port keying,
 same untrusted-exec risk, largest model change for the least fit.
 
-**Zero-code baseline (symlink `~/.uxd/n8n.toml` → repo file).** Works with
+**Zero-code baseline (symlink `~/.uxd/my-project.toml` → repo file).** Works with
 today's loader unchanged but offers no override layer, has Windows symlink
 friction, and makes `config edit` mutate the repo file. Fine as a stopgap, not
 the design.

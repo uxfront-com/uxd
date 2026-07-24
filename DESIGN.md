@@ -12,9 +12,9 @@ AI coding agents produce branches and PRs faster than they can be reviewed on Gi
 **uxd** is a CLI that materializes any ref of a configured project into an isolated, runnable local workspace with one command:
 
 ```
-uxd n8n 19234 code        # PR #19234 → worktree → open in editor
-uxd n8n 19234 run dev     # same workspace → install deps → start dev server
-uxd n8n clean --merged    # dispose of workspaces whose PRs merged
+uxd my-project 19234 code        # PR #19234 → worktree → open in editor
+uxd my-project 19234 run dev     # same workspace → install deps → start dev server
+uxd my-project clean --merged    # dispose of workspaces whose PRs merged
 ```
 
 ### Core abstraction
@@ -46,7 +46,7 @@ resolve(ref) → materialize(workspace) → act(command)
 1. One command from "agent pushed a branch/PR" to "app running locally / open in my editor".
 2. Concurrent workspaces for the same project that do not fight over ports, databases, or caches.
 3. Cheap disposal: workspaces are cattle; `clean` reclaims disk and git state safely.
-4. Scriptable: stable stdout contracts and `--json` so uxd composes with other automation (e.g. an n8n workflow that posts `uxd n8n 19234 code` into Slack).
+4. Scriptable: stable stdout contracts and `--json` so uxd composes with other automation (e.g. an automation workflow that posts `uxd my-project 19234 code` into Slack).
 5. Fast repeat use: setup (dependency install) is cached and skipped when lockfiles are unchanged.
 6. Trustworthy: `--dry-run` shows exactly what would execute; `doctor` diagnoses the environment.
 
@@ -131,7 +131,7 @@ Implement exactly this, in `src/cli/parse.ts`:
    - Else if `p0` matches `^https?://` or `^git@` → **URL form**: find the project whose `repo` matches the URL's host+owner+repo (normalize `.git` suffix, ssh↔https). Zero matches → error `E_RESOLVE` listing configured repos. If the URL encodes a ref (`/pull/<n>` → PR ref; `/tree/<branch>` → branch ref), consume it as the ref; otherwise the next positional is the ref.
    - Else → `p0` must name a project (`<p0>.toml` exists in the config dir). If not, exit 3 with the list of known projects (and a nearest-name suggestion if edit distance ≤ 2).
 4. **Positional 1 (`p1`):**
-   - Absent → treat as `list` (i.e. bare `uxd n8n` ≡ `uxd n8n list`).
+   - Absent → treat as `list` (i.e. bare `uxd my-project` ≡ `uxd my-project list`).
    - If `p1` ∈ project verbs → project command; remaining tokens are its args/flags.
    - Else → `p1` is the **ref** (parsed per §6).
 5. **Positional 2 (`p2`):**
@@ -144,25 +144,25 @@ Implement exactly this, in `src/cli/parse.ts`:
 ### 4.4 Examples (canonical — these must all work)
 
 ```
-uxd n8n 19234                          # PR 19234 → default_command (code)
-uxd n8n 19234 code
-uxd n8n pr/19234 run dev
-uxd n8n '#19234' shell
-uxd n8n ai/fix-canvas-drag checkout
-uxd n8n ai/fix-canvas-drag dev         # sugar → run dev
-uxd n8n - run test                     # last-used ref for n8n
-uxd n8n ~/agents/wt-3 run test         # adopt existing directory
-uxd https://github.com/n8n-io/n8n/pull/19234 code
-uxd https://github.com/n8n-io/n8n/tree/ai/fix-canvas-drag diff
-uxd n8n 19234 exec -- pnpm why lodash
-uxd n8n 19234 run dev -- --host 0.0.0.0    # passthrough appended to command argv
-uxd n8n list --json
-uxd n8n clean --merged --older-than 14d --yes
-uxd n8n 19234 sync --fresh
+uxd my-project 19234                          # PR 19234 → default_command (code)
+uxd my-project 19234 code
+uxd my-project pr/19234 run dev
+uxd my-project '#19234' shell
+uxd my-project ai/fix-canvas-drag checkout
+uxd my-project ai/fix-canvas-drag dev         # sugar → run dev
+uxd my-project - run test                     # last-used ref for my-project
+uxd my-project ~/agents/wt-3 run test         # adopt existing directory
+uxd https://github.com/my-org/my-project/pull/19234 code
+uxd https://github.com/my-org/my-project/tree/ai/fix-canvas-drag diff
+uxd my-project 19234 exec -- pnpm why lodash
+uxd my-project 19234 run dev -- --host 0.0.0.0    # passthrough appended to command argv
+uxd my-project list --json
+uxd my-project clean --merged --older-than 14d --yes
+uxd my-project 19234 sync --fresh
 uxd projects
 uxd doctor
-uxd config edit n8n
-cd "$(uxd n8n 19234 checkout)"         # works because of the stdout contract (§13)
+uxd config edit my-project
+cd "$(uxd my-project 19234 checkout)"         # works because of the stdout contract (§13)
 ```
 
 ### 4.5 Global flags
@@ -179,7 +179,7 @@ Recognized anywhere before the verb; also accepted after it (verb parsers must t
 | `--yes`, `-y` | Skip confirmation prompts (required for destructive ops when stdin is not a TTY). |
 | `--no-color` | Disable ANSI colors (also honors `NO_COLOR` env and non-TTY stderr). |
 
-Ref disambiguators (workspace commands only): `--pr <n>`, `--branch <name>`, `--path <p>` force the ref interpretation and replace the positional ref (e.g. `uxd n8n --branch 1234 code` for a branch literally named `1234`).
+Ref disambiguators (workspace commands only): `--pr <n>`, `--branch <name>`, `--path <p>` force the ref interpretation and replace the positional ref (e.g. `uxd my-project --branch 1234 code` for a branch literally named `1234`).
 
 ---
 
@@ -194,10 +194,10 @@ Config directory resolution order: `--config-dir` flag → `UXD_CONFIG_DIR` env 
 ```
 <config-dir>/
   defaults.toml          # optional global defaults
-  n8n.toml               # one file per project; filename = project name
+  my-project.toml               # one file per project; filename = project name
   styleframe.toml
   seeds/
-    n8n/                 # seed file tree for project "n8n" (§8.4)
+    my-project/                 # seed file tree for project "my-project" (§8.4)
       .env.local
       packages/cli/.env
 ```
@@ -216,13 +216,13 @@ All keys optional. `env` and `commands` are **not** allowed in defaults (keep pe
 
 ### 5.4 Project file — full schema
 
-Annotated example (`n8n.toml`):
+Annotated example (`my-project.toml`):
 
 ```toml
 # ── Repository ────────────────────────────────────────────────
-repo = "git@github.com:n8n-io/n8n.git"      # required. ssh or https.
-repo_path = "~/dev/uxd/n8n/repo"            # optional. default: {root}/{project}/repo
-worktrees_path = "~/dev/uxd/n8n/trees"      # optional. default: {root}/{project}/trees
+repo = "git@github.com:my-org/my-project.git"      # required. ssh or https.
+repo_path = "~/dev/uxd/my-project/repo"            # optional. default: {root}/{project}/repo
+worktrees_path = "~/dev/uxd/my-project/trees"      # optional. default: {root}/{project}/trees
 default_branch = "master"                   # optional. default: auto-detect from origin HEAD
 
 # ── Behavior ──────────────────────────────────────────────────
@@ -236,12 +236,12 @@ base_port = 5700                            # optional. default: 3000 + (fnv1a32
 run = "pnpm install --frozen-lockfile"      # optional. bash -c string
 cache_key = ["pnpm-lock.yaml", "**/package.json"]  # globs, relative to worktree
 seed_files = [".env.local", "packages/cli/.env"]   # relative paths to seed (§8.4)
-seed_from = "~/dev/n8n"                     # optional extra seed source (§8.4)
+seed_from = "~/dev/my-project"                     # optional extra seed source (§8.4)
 
 # ── Environment for run/exec/shell/hooks (templated, §5.6) ────
 [env]
-N8N_PORT = "{port}"
-N8N_USER_FOLDER = "{data_dir}"
+MY_PROJECT_PORT = "{port}"
+MY_PROJECT_USER_FOLDER = "{data_dir}"
 VITE_BASE_URL = "http://localhost:{port}"
 
 # ── Named commands ────────────────────────────────────────────
@@ -283,7 +283,7 @@ Field reference:
 | `commands.<name>` | table | no | — | `name` matches `^[a-z0-9][a-z0-9:_-]*$`. `run` required. |
 | `hooks.*` | string | no | — | Only the four names in §12. |
 
-Path values support leading `~` expansion only (no env-var interpolation). Validation is aggregate: report *all* schema errors for a file at once, each as `n8n.toml: commands.dev.run: expected string, got number`, then exit 3.
+Path values support leading `~` expansion only (no env-var interpolation). Validation is aggregate: report *all* schema errors for a file at once, each as `my-project.toml: commands.dev.run: expected string, got number`, then exit 3.
 
 ### 5.4.1 Local project config references (`extends`)
 
@@ -301,11 +301,11 @@ machine-specific paths and secrets stay in the local file, out of version
 control.
 
 ```toml
-# ~/.uxd/n8n.toml — local pointer
-extends = "~/dev/n8n/.uxd.toml"     # stable clone, never a worktree
-repo_path = "~/dev/uxd/n8n/repo"    # machine-specific override
+# ~/.uxd/my-project.toml — local pointer
+extends = "~/dev/my-project/.uxd.toml"     # stable clone, never a worktree
+repo_path = "~/dev/uxd/my-project/repo"    # machine-specific override
 [env]
-N8N_LICENSE_KEY = "..."             # secret stays local
+MY_PROJECT_LICENSE_KEY = "..."             # secret stays local
 ```
 
 Merge rules:
@@ -361,7 +361,7 @@ Parsed in this order (first match wins). Disambiguator flags (`--pr`, `--branch`
 
 | # | Pattern | RefSpec | Example |
 |---|---|---|---|
-| 1 | `-` | last-used ref for this project (from state; error `E_RESOLVE` if none) | `uxd n8n - shell` |
+| 1 | `-` | last-used ref for this project (from state; error `E_RESOLVE` if none) | `uxd my-project - shell` |
 | 2 | starts with `/`, `./`, `../`, or `~` | `{ kind: "path", path }` | `~/agents/wt-3` |
 | 3 | `^#?\\d+$` | `{ kind: "pr", number }` | `19234`, `#19234` |
 | 4 | `^pr/(\\d+)$` (case-insensitive) | `{ kind: "pr", number }` | `pr/19234` |
@@ -518,7 +518,7 @@ ensureWorkspace(project, refSpec, opts { setup: boolean }):
       "ref": "19234",                       // as originally typed
       "kind": "pr", "number": 19234,
       "branch": "pr/19234",
-      "path": "/home/alex/dev/uxd/n8n/trees/pr-19234",
+      "path": "/home/alex/dev/uxd/my-project/trees/pr-19234",
       "adopted": false,
       "ports": [5701],
       "createdAt": "2026-07-21T09:12:00Z",
@@ -536,7 +536,7 @@ Unknown `version` → exit 3 with an upgrade hint. Entries whose `path` no longe
 
 ### 8.3 Data directories
 
-`<worktrees_path>/.data/<slug>/`, created at materialization, exported as `{data_dir}`/`UXD_DATA_DIR`. Purpose: per-workspace mutable state (SQLite files, user folders, caches) so concurrent instances never share; e.g. `N8N_USER_FOLDER = "{data_dir}"`. Lives beside the worktrees (not inside them — keeps `git status` clean) and dies with the workspace.
+`<worktrees_path>/.data/<slug>/`, created at materialization, exported as `{data_dir}`/`UXD_DATA_DIR`. Purpose: per-workspace mutable state (SQLite files, user folders, caches) so concurrent instances never share; e.g. `MY_PROJECT_USER_FOLDER = "{data_dir}"`. Lives beside the worktrees (not inside them — keeps `git status` clean) and dies with the workspace.
 
 ### 8.4 Setup: seeding + install, cached
 
@@ -564,7 +564,7 @@ Common behavior for all workspace verbs: run `ensureWorkspace` first; honor `--f
 uxd <project> <ref> checkout [--fetch] [--setup] [--json]
 ```
 
-Materialize only. **stdout: the absolute worktree path, one line, nothing else** — this is a stable contract (`cd "$(uxd n8n 19234 checkout)"`). `--json`: `{ "project", "slug", "ref", "kind", "branch", "path", "ports", "created": bool }`. Exit 0 on success (whether created or reused).
+Materialize only. **stdout: the absolute worktree path, one line, nothing else** — this is a stable contract (`cd "$(uxd my-project 19234 checkout)"`). `--json`: `{ "project", "slug", "ref", "kind", "branch", "path", "ports", "created": bool }`. Exit 0 on success (whether created or reused).
 
 ### 9.2 `code`
 
@@ -948,7 +948,7 @@ Scenarios (each asserts exit code, stdout contract, stderr contains, and on-disk
 - [ ] setup pipeline: seeding, cache-key hashing, install (§8.4); data dirs; port allocation + `{port}`/`UXD_*` env (§8.5, §11.2)
 - [ ] `run` (+ passthrough, `--port`, `--env`), `exec`, `shell`, command-name sugar, `default_command`, `-` ref
 - [ ] `sync` (`--stash`/`--discard`/`--fresh`), `clean --older-than/--merged` (git-only fallback), hooks (§12)
-- **Accept:** three concurrent `uxd n8n <ref> run dev` instances serve on distinct ports with distinct data dirs; scenarios 4–9 pass.
+- **Accept:** three concurrent `uxd my-project <ref> run dev` instances serve on distinct ports with distinct data dirs; scenarios 4–9 pass.
 
 ### M2 — polish & ecosystem
 
@@ -972,7 +972,7 @@ Scenarios (each asserts exit code, stdout contract, stderr contains, and on-disk
 6. **Partial clone needs network for new blobs.** First checkout of a worktree and `diff` across unfetched trees will lazily fetch. Offline mode is degraded by design; error messages should say "network required (partial clone)".
 7. **Branch already checked out** in another worktree → git refuses `worktree add`. Catch and point at the existing workspace.
 8. **Manual `rm -rf` of a worktree dir** leaves git metadata behind; run `git worktree prune` during `clean` and flag orphans in `doctor`.
-9. **Atomic state writes** (temp + rename) and the project lock prevent two uxd invocations from corrupting state — n8n workflows *will* fire uxd concurrently.
+9. **Atomic state writes** (temp + rename) and the project lock prevent two uxd invocations from corrupting state — automation workflows *will* fire uxd concurrently.
 10. **Spawn argv arrays everywhere** except the documented `bash -c` cases; paths contain spaces.
 11. **pnpm in worktrees** is fine — the global content-addressable store means per-worktree `node_modules` are mostly hardlinks; still, surface disk usage in `clean` because dozens of workspaces add up.
 12. **`git worktree remove` refuses dirty trees** without `--force` — the plan/confirm flow in §9.9 depends on that; don't pre-force.
@@ -984,24 +984,24 @@ Scenarios (each asserts exit code, stdout contract, stderr contains, and on-disk
 ## Appendix A — sample session
 
 ```
-$ uxd n8n 19234 run dev
+$ uxd my-project 19234 run dev
 → resolving pr/19234
-→ cloning n8n (bare, partial) into ~/dev/uxd/n8n/repo   # first use only
+→ cloning my-project (bare, partial) into ~/dev/uxd/my-project/repo   # first use only
 → fetching pull/19234 → pr/19234
-→ worktree ready: ~/dev/uxd/n8n/trees/pr-19234
+→ worktree ready: ~/dev/uxd/my-project/trees/pr-19234
 → push-back wired to origin/ai/fix-canvas-drag
 → seeded .env.local, packages/cli/.env
 → setup: pnpm install --frozen-lockfile (cache miss)
 → running dev on port 5701  (Ctrl-C to stop)
 … vite output …
 ^C
-$ uxd n8n 19234 code
+$ uxd my-project 19234 code
 → worktree ready (reused)
 → opening in zed
-$ uxd n8n list
+$ uxd my-project list
 SLUG       KIND  BRANCH               STATUS   PORT   AGE  LAST USED  TITLE
 pr-19234   pr    ai/fix-canvas-drag   open ✓   5701   5m   just now   fix(editor): canvas drag
-$ uxd n8n clean --merged --yes        # …a week later
+$ uxd my-project clean --merged --yes        # …a week later
 → plan: pr-19234 (merged, clean, 1.9 GB)
 pr-19234
 → freed 1.9 GB
