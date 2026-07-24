@@ -42,6 +42,7 @@ export const RawSetupSchema = z
 
 export const RawProjectSchema = z
   .object({
+    extends: z.string().min(1).optional(),
     repo: z.string().min(1),
     repo_path: z.string().optional(),
     worktrees_path: z.string().optional(),
