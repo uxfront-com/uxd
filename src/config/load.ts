@@ -59,8 +59,13 @@ export function projectFilePath(configDir: string, name: string): string {
 }
 
 export function projectExists(configDir: string, name: string): boolean {
-  if (!PROJECT_NAME_RE.test(name) || RESERVED_NAMES.has(name)) return false;
+  if (!isValidProjectName(name)) return false;
   return existsSync(projectFilePath(configDir, name));
+}
+
+/** A syntactically valid, non-reserved project name (matches the discovery filter). */
+export function isValidProjectName(name: string): boolean {
+  return PROJECT_NAME_RE.test(name) && !RESERVED_NAMES.has(name);
 }
 
 // ── defaults.toml ─────────────────────────────────────────────────────────

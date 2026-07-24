@@ -52,7 +52,7 @@ describe("completions §9.13", () => {
     const { code, out } = await emit(["bash"]);
     expect(code).toBe(0);
     expect(out).toContain("complete -F _uxd uxd");
-    expect(out).toContain("projects doctor config completions help version");
+    expect(out).toContain("setup projects doctor config completions help version");
     expect(out).toContain("n8n styleframe");
     // dynamic slug completion shells out to `uxd <project> list --json`
     expect(out).toContain("list --json");
