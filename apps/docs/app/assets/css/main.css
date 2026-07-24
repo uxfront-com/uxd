@@ -1,0 +1,20 @@
+/*
+ * Single Tailwind entry for the docs app.
+ *
+ * This imports the layer's neutral base — which owns the single
+ * `@import "tailwindcss"` / `@import "@nuxt/ui"` — so this app's own utilities
+ * compile in that SAME pass. The layer also registers its `main.css` as a
+ * standalone CSS entry; that registration is stripped in `nuxt.config.ts` (see
+ * the `modules:done` hook). Two Tailwind entries would each re-emit every base
+ * utility and the second copy would clobber responsive variants — one entry,
+ * one emission, correct cascade.
+ */
+@import "@uxfront/layer-docs/app/assets/css/main.css";
+
+/*
+ * `@source` re-scans this app's own content + config for utility classes: the
+ * layer's `@source` paths are package-relative (they resolve inside
+ * node_modules), so they never see the consumer's markdown or app.config.
+ */
+@source "../../../content/**/*";
+@source "../../app.config.ts";
