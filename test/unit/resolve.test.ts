@@ -79,18 +79,18 @@ describe("slug — §6.3 sanitization / truncation / collision", () => {
 
 describe("URL normalization & extraction — §4.3", () => {
   it("ssh and https normalize equal", () => {
-    const a = normalizeRepoUrl("git@github.com:n8n-io/n8n.git");
-    const b = normalizeRepoUrl("https://github.com/n8n-io/n8n");
+    const a = normalizeRepoUrl("git@github.com:my-org/my-project.git");
+    const b = normalizeRepoUrl("https://github.com/my-org/my-project");
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(coordsEqual(a!, b!)).toBe(true);
   });
   it("extracts PR from /pull/<n>", () => {
-    const u = parseUrlInput("https://github.com/n8n-io/n8n/pull/19234");
+    const u = parseUrlInput("https://github.com/my-org/my-project/pull/19234");
     expect(u?.ref).toEqual({ kind: "pr", number: 19234 });
   });
   it("extracts branch from /tree/<branch>", () => {
-    const u = parseUrlInput("https://github.com/n8n-io/n8n/tree/ai/fix-canvas-drag");
+    const u = parseUrlInput("https://github.com/my-org/my-project/tree/ai/fix-canvas-drag");
     expect(u?.ref).toEqual({ kind: "branch", name: "ai/fix-canvas-drag" });
   });
   it("non-url returns null", () => expect(normalizeRepoUrl("not a url")).toBeNull());

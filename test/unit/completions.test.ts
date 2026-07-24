@@ -41,7 +41,7 @@ beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "uxd-comp-"));
   configDir = join(tmp, "config");
   mkdirSync(configDir, { recursive: true });
-  writeFileSync(join(configDir, "n8n.toml"), 'repo = "git@github.com:n8n-io/n8n.git"\nrepo_path = "/tmp/r"\nworktrees_path = "/tmp/w"\n');
+  writeFileSync(join(configDir, "my-project.toml"), 'repo = "git@github.com:my-org/my-project.git"\nrepo_path = "/tmp/r"\nworktrees_path = "/tmp/w"\n');
   writeFileSync(join(configDir, "styleframe.toml"), 'repo = "git@github.com:styleframe/styleframe.git"\nrepo_path = "/tmp/r2"\nworktrees_path = "/tmp/w2"\n');
 });
 
@@ -53,7 +53,7 @@ describe("completions §9.13", () => {
     expect(code).toBe(0);
     expect(out).toContain("complete -F _uxd uxd");
     expect(out).toContain("projects doctor config completions help version");
-    expect(out).toContain("n8n styleframe");
+    expect(out).toContain("my-project styleframe");
     // dynamic slug completion shells out to `uxd <project> list --json`
     expect(out).toContain("list --json");
   });
@@ -62,13 +62,13 @@ describe("completions §9.13", () => {
     const { out } = await emit(["zsh"]);
     expect(out).toContain("#compdef uxd");
     expect(out).toContain("checkout code run exec shell sync diff info rm");
-    expect(out).toContain("projects=(n8n styleframe)");
+    expect(out).toContain("projects=(my-project styleframe)");
   });
 
   it("fish script emits a per-project completion rule", async () => {
     const { out } = await emit(["fish"]);
     expect(out).toContain("complete -c uxd");
-    expect(out).toContain("-a 'n8n'");
+    expect(out).toContain("-a 'my-project'");
     expect(out).toContain("__fish_uxd_slugs");
   });
 

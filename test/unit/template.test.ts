@@ -5,7 +5,7 @@ const vars = workspaceVars({
   path: "/w/ai-fix",
   repoPath: "/repo",
   dataDir: "/data/ai-fix",
-  project: "n8n",
+  project: "my-project",
   ref: "ai/fix",
   branch: "ai/fix",
   slug: "ai-fix",
@@ -14,7 +14,7 @@ const vars = workspaceVars({
 
 describe("interpolate — §5.5 single-pass", () => {
   it("substitutes all known vars", () => {
-    expect(interpolate("{project}:{slug}@{path}", vars, "x")).toBe("n8n:ai-fix@/w/ai-fix");
+    expect(interpolate("{project}:{slug}@{path}", vars, "x")).toBe("my-project:ai-fix@/w/ai-fix");
     expect(interpolate("{repo_path}/{branch}", vars, "x")).toBe("/repo/ai/fix");
     expect(interpolate("{data_dir}|{ref}", vars, "x")).toBe("/data/ai-fix|ai/fix");
   });

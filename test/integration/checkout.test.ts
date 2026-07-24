@@ -16,7 +16,7 @@ beforeEach(() => {
   origin = makeFixtureOrigin(tmp);
   origin.commit("main", { "README.md": "# fixture\n" });
   origin.commit("feature-x", { "feat.txt": "hello\n" });
-  env = makeEnv(tmp, { n8n: { repo: origin.url, defaultBranch: "main" } });
+  env = makeEnv(tmp, { "my-project": { repo: origin.url, defaultBranch: "main" } });
 });
 
 afterEach(() => {
@@ -31,19 +31,19 @@ function state(project: string): { workspaces: Record<string, { slug: string; ki
 
 describe("§17.2 scenario 1 — first checkout of a branch", () => {
   it("clones bare, sets fetch refspec, worktree exists, stdout = path", async () => {
-    const r = await env.run(["n8n", "feature-x", "checkout"]);
+    const r = await env.run(["my-project", "feature-x", "checkout"]);
     expect(r.code).toBe(0);
 
-    const expectedPath = join(env.worktreesPath("n8n"), "feature-x");
+    const expectedPath = join(env.worktreesPath("my-project"), "feature-x");
     expect(r.stdout.trim()).toBe(expectedPath);
     expect(existsSync(expectedPath)).toBe(true);
     expect(existsSync(join(expectedPath, "feat.txt"))).toBe(true);
 
-    expect(existsSync(env.repoPath("n8n"))).toBe(true);
-    expect(await isBareRepo(env.repoPath("n8n"))).toBe(true);
-    expect(await fetchRefspecConfigured(env.repoPath("n8n"))).toBe(true);
+    expect(existsSync(env.repoPath("my-project"))).toBe(true);
+    expect(await isBareRepo(env.repoPath("my-project"))).toBe(true);
+    expect(await fetchRefspecConfigured(env.repoPath("my-project"))).toBe(true);
 
-    const s = state("n8n");
+    const s = state("my-project");
     expect(s.workspaces["feature-x"]?.kind).toBe("branch");
     expect(s.workspaces["feature-x"]?.branch).toBe("feature-x");
   });
@@ -51,13 +51,13 @@ describe("§17.2 scenario 1 — first checkout of a branch", () => {
 
 describe("§17.2 scenario 2 — second checkout reuses without fetching", () => {
   it("no fetch on the fast path, same path, exit 0", async () => {
-    const first = await env.run(["n8n", "feature-x", "checkout"]);
+    const first = await env.run(["my-project", "feature-x", "checkout"]);
     expect(first.code).toBe(0);
     const path1 = first.stdout.trim();
 
     const recorded: string[][] = [];
     setProcRecorder((argv) => recorded.push(argv));
-    const second = await env.run(["n8n", "feature-x", "checkout"]);
+    const second = await env.run(["my-project", "feature-x", "checkout"]);
     setProcRecorder(null);
 
     expect(second.code).toBe(0);
@@ -70,21 +70,21 @@ describe("§17.2 scenario 2 — second checkout reuses without fetching", () => 
 describe("§17.2 scenario 3 — checkout of a PR ref", () => {
   it("creates pr/<n> branch, worktree, and a state entry", async () => {
     origin.makePr(42, "feature-x");
-    const r = await env.run(["n8n", "42", "checkout"]);
+    const r = await env.run(["my-project", "42", "checkout"]);
     expect(r.code).toBe(0);
 
-    const expectedPath = join(env.worktreesPath("n8n"), "pr-42");
+    const expectedPath = join(env.worktreesPath("my-project"), "pr-42");
     expect(r.stdout.trim()).toBe(expectedPath);
     expect(existsSync(expectedPath)).toBe(true);
 
     // Local pr/42 branch materialized in the bare repo.
     const branch = spawnSync(
       "git",
-      ["-C", env.repoPath("n8n"), "rev-parse", "--verify", "refs/heads/pr/42"],
+      ["-C", env.repoPath("my-project"), "rev-parse", "--verify", "refs/heads/pr/42"],
     );
     expect(branch.status).toBe(0);
 
-    const s = state("n8n");
+    const s = state("my-project");
     expect(s.workspaces["pr-42"]?.kind).toBe("pr");
     expect(s.workspaces["pr-42"]?.branch).toBe("pr/42");
   });
@@ -92,16 +92,16 @@ describe("§17.2 scenario 3 — checkout of a PR ref", () => {
 
 describe("§17.2 scenario 10 — --dry-run checkout on a fresh project", () => {
   it("prints the plan and creates nothing", async () => {
-    const r = await env.run(["--dry-run", "n8n", "feature-x", "checkout"]);
+    const r = await env.run(["--dry-run", "my-project", "feature-x", "checkout"]);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain("git clone --bare");
     expect(r.stdout).toContain("fetch");
     expect(r.stdout).toContain("worktree add");
 
     // Nothing materialized on disk.
-    expect(existsSync(env.repoPath("n8n"))).toBe(false);
-    expect(existsSync(join(env.worktreesPath("n8n"), "feature-x"))).toBe(false);
-    expect(existsSync(join(env.stateHome, "uxd", "n8n.json"))).toBe(false);
+    expect(existsSync(env.repoPath("my-project"))).toBe(false);
+    expect(existsSync(join(env.worktreesPath("my-project"), "feature-x"))).toBe(false);
+    expect(existsSync(join(env.stateHome, "uxd", "my-project.json"))).toBe(false);
   });
 });
 
@@ -109,40 +109,40 @@ describe("§17.2 scenario 11 — lock contention", () => {
   it("two concurrent checkouts serialize; both succeed", async () => {
     origin.commit("feature-y", { "y.txt": "y\n" });
     const [a, b] = await Promise.all([
-      env.run(["n8n", "feature-x", "checkout"]),
-      env.run(["n8n", "feature-y", "checkout"]),
+      env.run(["my-project", "feature-x", "checkout"]),
+      env.run(["my-project", "feature-y", "checkout"]),
     ]);
     expect(a.code).toBe(0);
     expect(b.code).toBe(0);
-    expect(existsSync(join(env.worktreesPath("n8n"), "feature-x"))).toBe(true);
-    expect(existsSync(join(env.worktreesPath("n8n"), "feature-y"))).toBe(true);
+    expect(existsSync(join(env.worktreesPath("my-project"), "feature-x"))).toBe(true);
+    expect(existsSync(join(env.worktreesPath("my-project"), "feature-y"))).toBe(true);
   });
 
   it("steals a stale lock held by a dead pid", async () => {
     // Seed the primary repo first so the stolen-lock run does real work.
-    await env.run(["n8n", "feature-x", "checkout"]);
+    await env.run(["my-project", "feature-x", "checkout"]);
 
-    const lockFile = join(env.stateHome, "uxd", "n8n.lock");
+    const lockFile = join(env.stateHome, "uxd", "my-project.lock");
     writeFileSync(lockFile, JSON.stringify({ pid: 2_147_483_646, startedAt: new Date().toISOString() }));
 
     origin.commit("feature-z", { "z.txt": "z\n" });
-    const r = await env.run(["n8n", "feature-z", "checkout"]);
+    const r = await env.run(["my-project", "feature-z", "checkout"]);
     expect(r.code).toBe(0);
     expect(r.stderr).toContain("stealing stale lock");
-    expect(existsSync(join(env.worktreesPath("n8n"), "feature-z"))).toBe(true);
+    expect(existsSync(join(env.worktreesPath("my-project"), "feature-z"))).toBe(true);
   });
 });
 
 describe("error contract (§14)", () => {
   it("a ref absent on origin → E_RESOLVE (exit 4), not E_GIT", async () => {
-    const r = await env.run(["n8n", "definitely-no-such-branch", "checkout"]);
+    const r = await env.run(["my-project", "definitely-no-such-branch", "checkout"]);
     expect(r.code).toBe(4);
     expect(r.stderr).toContain("error(E_RESOLVE)");
     expect(r.stderr).toContain("does not exist on origin");
   });
 
   it("an absent PR ref on origin → E_RESOLVE (exit 4)", async () => {
-    const r = await env.run(["n8n", "999999", "checkout"]);
+    const r = await env.run(["my-project", "999999", "checkout"]);
     expect(r.code).toBe(4);
     expect(r.stderr).toContain("error(E_RESOLVE)");
   });

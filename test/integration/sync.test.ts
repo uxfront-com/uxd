@@ -18,7 +18,7 @@ beforeEach(() => {
   origin = makeFixtureOrigin(tmp);
   origin.commit("main", { "README.md": "# fixture\n" });
   origin.commit("feature-x", { "feat.txt": "hello\n" });
-  env = makeEnv(tmp, { n8n: { repo: origin.url, defaultBranch: "main" } });
+  env = makeEnv(tmp, { "my-project": { repo: origin.url, defaultBranch: "main" } });
 });
 
 afterEach(() => {
@@ -33,35 +33,35 @@ function gitOut(dir: string, args: string[]): string {
 
 describe("§17.2 scenario 4 — sync", () => {
   it("hard-resets to the new tip after a force-push", async () => {
-    const co = await env.run(["n8n", "feature-x", "checkout"]);
+    const co = await env.run(["my-project", "feature-x", "checkout"]);
     const path = co.stdout.trim();
     expect(readFileSync(join(path, "feat.txt"), "utf8")).toBe("hello\n");
 
     origin.forcePush("feature-x", { "feat.txt": "changed\n" });
 
-    const r = await env.run(["n8n", "feature-x", "sync"]);
+    const r = await env.run(["my-project", "feature-x", "sync"]);
     expect(r.code).toBe(0);
     expect(readFileSync(join(path, "feat.txt"), "utf8")).toBe("changed\n");
   });
 
   it("refuses a dirty worktree with E_GIT (exit 5)", async () => {
-    const co = await env.run(["n8n", "feature-x", "checkout"]);
+    const co = await env.run(["my-project", "feature-x", "checkout"]);
     const path = co.stdout.trim();
     writeFileSync(join(path, "feat.txt"), "local edit\n");
 
-    const r = await env.run(["n8n", "feature-x", "sync"]);
+    const r = await env.run(["my-project", "feature-x", "sync"]);
     expect(r.code).toBe(5);
     expect(r.stderr).toContain("error(E_GIT)");
     expect(r.stderr).toContain("uncommitted");
   });
 
   it("--stash preserves local changes in a stash, then resets", async () => {
-    const co = await env.run(["n8n", "feature-x", "checkout"]);
+    const co = await env.run(["my-project", "feature-x", "checkout"]);
     const path = co.stdout.trim();
     origin.forcePush("feature-x", { "feat.txt": "changed\n" });
     writeFileSync(join(path, "feat.txt"), "local edit\n");
 
-    const r = await env.run(["n8n", "feature-x", "sync", "--stash"]);
+    const r = await env.run(["my-project", "feature-x", "sync", "--stash"]);
     expect(r.code).toBe(0);
     // Worktree reset to the new tip; the edit is parked in a stash.
     expect(readFileSync(join(path, "feat.txt"), "utf8")).toBe("changed\n");
@@ -69,22 +69,22 @@ describe("§17.2 scenario 4 — sync", () => {
   });
 
   it("--discard drops local changes and resets", async () => {
-    const co = await env.run(["n8n", "feature-x", "checkout"]);
+    const co = await env.run(["my-project", "feature-x", "checkout"]);
     const path = co.stdout.trim();
     origin.forcePush("feature-x", { "feat.txt": "changed\n" });
     writeFileSync(join(path, "feat.txt"), "local edit\n");
 
-    const r = await env.run(["n8n", "feature-x", "sync", "--discard"]);
+    const r = await env.run(["my-project", "feature-x", "sync", "--discard"]);
     expect(r.code).toBe(0);
     expect(readFileSync(join(path, "feat.txt"), "utf8")).toBe("changed\n");
     expect(gitOut(path, ["stash", "list"]).trim()).toBe("");
   });
 
   it("--fresh removes and re-materializes the workspace", async () => {
-    const co = await env.run(["n8n", "feature-x", "checkout"]);
+    const co = await env.run(["my-project", "feature-x", "checkout"]);
     const path = co.stdout.trim();
 
-    const r = await env.run(["n8n", "feature-x", "sync", "--fresh"]);
+    const r = await env.run(["my-project", "feature-x", "sync", "--fresh"]);
     expect(r.code).toBe(0);
     expect(r.stderr).toContain("recreated feature-x");
     expect(existsSync(path)).toBe(true);
@@ -93,11 +93,11 @@ describe("§17.2 scenario 4 — sync", () => {
   });
 
   it("refuses --fresh on a dirty worktree", async () => {
-    const co = await env.run(["n8n", "feature-x", "checkout"]);
+    const co = await env.run(["my-project", "feature-x", "checkout"]);
     const path = co.stdout.trim();
     writeFileSync(join(path, "feat.txt"), "local edit\n");
 
-    const r = await env.run(["n8n", "feature-x", "sync", "--fresh"]);
+    const r = await env.run(["my-project", "feature-x", "sync", "--fresh"]);
     expect(r.code).toBe(5);
     expect(r.stderr).toContain("error(E_GIT)");
   });
