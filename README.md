@@ -85,14 +85,15 @@ The examples below use `uxd`; substitute `node dist/bin/uxd.js` if you have not 
 
 ## Quick start
 
-1. Point `uxd` at a project. By default `uxd` reads its config from `~/.uxd` (override with `UXD_CONFIG_DIR` or `--config-dir`):
+1. Scaffold your first project in one command. On a fresh machine `uxd setup` creates the config dir (`~/.uxd` by default), sets a base `root`, and writes your first project file — prompting for each field on a terminal, or taking them as flags:
 
    ```bash
-   uxd config path                     # → ~/.uxd
-   uxd config add my-project           # open (or create) ~/.uxd/my-project.toml
+   uxd setup                           # interactive: asks for root, name, repo, default branch
+   # or fully non-interactive:
+   uxd setup --name my-project --repo git@github.com:my-org/my-project.git
    ```
 
-   A minimal `my-project.toml`:
+   This writes `~/.uxd/defaults.toml` (`root`) and a minimal `~/.uxd/my-project.toml`. See [`setup`](#top-level-verbs) for the full prompt/flag reference. Flesh the project out later with `uxd config edit my-project`:
 
    ```toml
    repo = "git@github.com:my-org/my-project.git"
@@ -106,7 +107,7 @@ The examples below use `uxd`; substitute `node dist/bin/uxd.js` if you have not 
    run = "pnpm dev"
    ```
 
-   (`repo_path`/`worktrees_path` default to `{root}/{project}/…`; set `root` in `defaults.toml` — see [Configuration](#configuration).)
+   (`repo_path`/`worktrees_path` default to `{root}/{project}/…`; `root` comes from `defaults.toml` — see [Configuration](#configuration).)
 
 2. Check your setup and validate the config:
 
@@ -298,6 +299,7 @@ Filters intersect. Dirty worktrees are skipped unless `--force`; adopted workspa
 No project argument.
 
 ```bash
+uxd setup                                    # create the config dir and scaffold your first project
 uxd projects                                 # list configured projects
 uxd doctor                                   # diagnose environment & configs
 uxd config path                              # print the config dir
@@ -307,6 +309,45 @@ uxd config validate [project]                # validate all configs, or one
 uxd completions <bash|zsh|fish>              # print a completion script
 uxd help                                     # usage
 uxd version                                  # version string
+```
+
+**`setup`** is the first-run onboarding path: it creates the config dir if missing, ensures a `defaults.root` so derived paths resolve, and scaffolds your first project file — reading the existing [project schema](#project-file), inventing nothing. It's the only command exempt from the config-dir existence check, since it's what creates the dir.
+
+```
+uxd setup [--name <name>] [--repo <url>] [--root <dir>] [--default-branch <branch>] [--force]
+```
+
+On a terminal it prompts for each field in order; every prompt is also a flag, so the same command runs non-interactively in CI. It asks only for what it needs — `--root` is skipped once `defaults.root` is set.
+
+| Prompt | Flag | Written to | Notes |
+|---|---|---|---|
+| Base directory for repos & worktrees `[~/dev/uxd]` | `--root` | `defaults.toml` → `root` | Asked only when `defaults.root` is unset; makes derived paths resolve |
+| Project name | `--name` | filename `<name>.toml` | Must match `^[a-z0-9][a-z0-9._-]*$`; not `defaults`/`seeds` |
+| Repository URL (`git@…` or `https://…`) | `--repo` | `<name>.toml` → `repo` | Required |
+| Default branch (blank = auto-detect) | `--default-branch` | `<name>.toml` → `default_branch` | Omitted from the file when blank |
+
+`repo_path` / `worktrees_path` are left implicit — derived from `root` (see [Configuration](#configuration)). The freshly written file is validated with the normal loader before success is reported, so a bad combination fails here rather than on your next command.
+
+Guards:
+
+- Invalid or reserved name, or an empty repo → `E_USAGE`, nothing written.
+- Project file already exists → `E_CONFIG` unless you pass `--force` (which overwrites only that project file).
+- A required value missing on a non-TTY with no flag → `E_USAGE` naming the flag to pass.
+- `--dry-run` prints the planned writes and changes nothing.
+
+Headless / CI — pass every value as a flag (add `-y`/`--yes` to accept the `--root` default without a prompt):
+
+```bash
+uxd setup \
+  --config-dir ./ci-config \
+  --name acme-web \
+  --repo git@github.com:acme/acme-web.git \
+  --default-branch main \
+  --yes
+# → created config dir ./ci-config
+# → set defaults.root = ~/dev/uxd
+# → scaffolded acme-web.toml
+# → next: uxd acme-web main
 ```
 
 **`doctor`** checks `git` version, `gh` presence/auth, config-dir readability, state-dir writability, stale locks, and — per project — schema validity, the bare repo and its fetch refspec, editor binary on `PATH`, commands that shadow built-in verbs, and worktree/state drift. It also warns when `core.hooksPath` is set (see [Worktrees & hooks](#worktrees--hooks)). Exits non-zero if any check fails.
