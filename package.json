@@ -1,6 +1,6 @@
 {
-  "name": "uxd",
-  "version": "0.0.0",
+  "name": "@uxfront/uxd",
+  "version": "1.0.0",
   "description": "Materialize any git ref of a configured project into an isolated, runnable local workspace.",
   "type": "module",
   "bin": {
