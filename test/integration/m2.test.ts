@@ -223,7 +223,7 @@ describe("§9.12 config add alias", () => {
   it("an unknown subcommand still lists add in the hint", async () => {
     const r = await env.run(["config", "frobnicate"]);
     expect(r.code).not.toBe(0);
-    expect(r.stderr).toContain("path | edit | add | validate");
+    expect(r.stderr).toContain("path | edit | add | link | validate");
   });
 });
 

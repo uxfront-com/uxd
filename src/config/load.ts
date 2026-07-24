@@ -63,6 +63,11 @@ export function projectExists(configDir: string, name: string): boolean {
   return existsSync(projectFilePath(configDir, name));
 }
 
+/** True when `name` is a legal project name (matches the pattern, not reserved). */
+export function isValidProjectName(name: string): boolean {
+  return PROJECT_NAME_RE.test(name) && !RESERVED_NAMES.has(name);
+}
+
 // ── defaults.toml ─────────────────────────────────────────────────────────
 
 export function loadDefaults(configDir: string): Defaults {
@@ -103,6 +108,80 @@ export function deriveBasePort(project: string): number {
   return 3000 + (fnv1a32(project) % 40) * 100;
 }
 
+// ── extends resolution (§5.4.1) ─────────────────────────────────────────────
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Merge `over` onto `base`: tables merge key-by-key (over wins), arrays and
+ * scalars are replaced wholesale by `over`. Local (`over`) always wins.
+ */
+function deepMerge(
+  base: Record<string, unknown>,
+  over: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(over)) {
+    const bv = out[k];
+    out[k] = isPlainObject(bv) && isPlainObject(v) ? deepMerge(bv, v) : v;
+  }
+  return out;
+}
+
+/**
+ * If the local file declares `extends`, load the referenced base file and merge
+ * this file over it. Single level only — the base may not itself extend — which
+ * also makes cycles impossible. Path is `~`-expanded and, when relative,
+ * anchored to the config dir. All failures are E_CONFIG (§5.4.1).
+ */
+function resolveExtends(
+  configDir: string,
+  label: string,
+  localFile: string,
+  rawLocal: unknown,
+): unknown {
+  if (!isPlainObject(rawLocal)) return rawLocal; // let the schema reject non-tables
+  const ext = rawLocal["extends"];
+  if (ext === undefined) return rawLocal;
+  if (typeof ext !== "string" || ext.trim() === "") {
+    throw new ConfigValidationError([
+      { file: label, path: "extends", message: "must be a non-empty string path" },
+    ]);
+  }
+
+  const basePath = resolvePath(ext, configDir);
+  if (resolvePath(localFile) === basePath) {
+    throw new ConfigValidationError([
+      { file: label, path: "extends", message: "a config cannot extend itself" },
+    ]);
+  }
+  if (!existsSync(basePath)) {
+    throw new ConfigValidationError([
+      { file: label, path: "extends", message: `referenced config not found: ${basePath}` },
+    ]);
+  }
+
+  const issues: ConfigIssue[] = [];
+  const rawBase = parseTomlFile(basePath, basePath, issues);
+  if (issues.length) throw new ConfigValidationError(issues);
+  if (isPlainObject(rawBase) && rawBase["extends"] !== undefined) {
+    throw new ConfigValidationError([
+      { file: basePath, path: "extends", message: "nested extends is not allowed (single level only)" },
+    ]);
+  }
+  if (!isPlainObject(rawBase)) {
+    throw new ConfigValidationError([
+      { file: basePath, path: "(root)", message: "extended config must be a table" },
+    ]);
+  }
+
+  const merged = deepMerge(rawBase, rawLocal);
+  delete merged["extends"];
+  return merged;
+}
+
 /**
  * Load & fully resolve one project config. Aggregates all schema/semantic
  * errors for the file into a single ConfigValidationError (exit 3, §5.4).
@@ -123,8 +202,12 @@ export function loadProject(configDir: string, name: string, defaults: Defaults)
   }
 
   const issues: ConfigIssue[] = [];
-  const raw = parseTomlFile(file, label, issues);
+  const rawLocal = parseTomlFile(file, label, issues);
   if (issues.length) throw new ConfigValidationError(issues);
+
+  // Resolve an optional `extends` reference (§5.5): the referenced file is the
+  // base, this file's keys override it. Single level only.
+  const raw = resolveExtends(configDir, label, file, rawLocal);
 
   const parsed = RawProjectSchema.safeParse(raw);
   if (!parsed.success) {
