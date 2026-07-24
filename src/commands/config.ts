@@ -1,16 +1,19 @@
 // `config path | edit | add | validate` (§9.12). `add` is an alias of `edit`.
 
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { ExitCode, usage } from "../lib/errors.ts";
 import { parseFlags } from "../cli/flags.ts";
 import { passthrough } from "../lib/proc.ts";
 import {
+  isValidProjectName,
   loadDefaults,
   loadProject,
+  PROJECT_NAME_RULE,
   projectExists,
   projectFilePath,
   validateAll,
 } from "../config/load.ts";
+import { defaultProjectTemplate } from "../lib/project-template.ts";
 import { resolveEditor } from "../core/editor.ts";
 import type { TopInput } from "./types.ts";
 
@@ -42,13 +45,33 @@ function path(configDir: string): number {
 async function edit(input: TopInput, project?: string): Promise<number> {
   const { ctx } = input;
   const target = project ? projectFilePath(ctx.configDir, project) : ctx.configDir;
-  if (project && !projectExists(ctx.configDir, project) && !existsSync(target)) {
+  const existed = project ? existsSync(target) : true;
+
+  // Seed a starter template when the project file is absent, so the user lands
+  // in a working scaffold instead of a blank buffer (§9.12). An existing file is
+  // never touched — `add` stays a non-destructive alias of `edit` (AC2).
+  if (project && !existed) {
+    // Only names that could load as a project get seeded; a reserved or
+    // malformed name would only ever produce a dead file, so refuse it (AC3).
+    if (!isValidProjectName(project)) {
+      throw usage(`invalid project name '${project}'`, PROJECT_NAME_RULE);
+    }
     ctx.log.warn(`creating new project file: ${target}`);
+    const template = defaultProjectTemplate(project);
+    if (ctx.flags.dryRun) {
+      // Show what would be written; --dry-run creates nothing (AC4).
+      process.stdout.write(template);
+    } else {
+      mkdirSync(ctx.configDir, { recursive: true });
+      writeFileSync(target, template, "utf8");
+    }
   }
 
   // Prefer the project's configured editor, then $VISUAL/$EDITOR, then a preset.
+  // A freshly seeded file is opened with the env editor (its config can't resolve
+  // yet), so only consult a pre-existing project's `editor`.
   let editor = process.env.VISUAL || process.env.EDITOR || "";
-  if (project && projectExists(ctx.configDir, project)) {
+  if (project && existed && projectExists(ctx.configDir, project)) {
     try {
       editor = loadProject(ctx.configDir, project, loadDefaults(ctx.configDir)).editor;
     } catch {

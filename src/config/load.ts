@@ -58,6 +58,14 @@ export function projectFilePath(configDir: string, name: string): string {
   return join(configDir, `${name}.toml`);
 }
 
+/** Human-readable form of the project-name rule, for usage errors (§5.1). */
+export const PROJECT_NAME_RULE = "must match ^[a-z0-9][a-z0-9._-]*$ and cannot be 'defaults' or 'seeds'";
+
+/** True if `name` is a legal, non-reserved project name (§5.1). */
+export function isValidProjectName(name: string): boolean {
+  return PROJECT_NAME_RE.test(name) && !RESERVED_NAMES.has(name);
+}
+
 export function projectExists(configDir: string, name: string): boolean {
   if (!PROJECT_NAME_RE.test(name) || RESERVED_NAMES.has(name)) return false;
   return existsSync(projectFilePath(configDir, name));
