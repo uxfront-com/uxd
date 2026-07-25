@@ -4,6 +4,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+// uxd's published package name. `version()` matches on it so it can tell its own
+// manifest apart from a parent workspace's package.json while walking up.
+export const PKG_NAME = "@uxfront/uxd";
+
 export function version(): string {
   // Walk up from this module until we find uxd's own package.json. The relative
   // depth differs between source (src/cli/) and the compiled build (dist/src/cli/),
@@ -14,7 +18,7 @@ export function version(): string {
     if (existsSync(file)) {
       try {
         const pkg = JSON.parse(readFileSync(file, "utf8")) as { name?: string; version?: string };
-        if (pkg.name === "uxd") return pkg.version ?? "0.0.0";
+        if (pkg.name === PKG_NAME) return pkg.version ?? "0.0.0";
       } catch {
         // unreadable/invalid; keep walking up
       }
