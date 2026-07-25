@@ -99,7 +99,7 @@ One pipeline behind every verb. Learn it once and the whole CLI is predictable.
   [materialize]{.text-primary} the workspace
 
   #description
-  A worktree exists, with dependencies installed, seed files copied, and ports allocated. Idempotent — and cheap when it already exists.
+  A worktree exists, with dependencies installed, seed files copied, ports allocated, and the environment computed. Idempotent — and cheap when it already exists.
   :::
 
   :::u-page-feature
@@ -176,15 +176,20 @@ Section 3 — Isolation --------------------------------------------------------
 
 ::browser-frame
 ---
-title: ~/.config/uxd/projects/acme-web.toml
+title: ~/.uxd/my-project.toml
 ---
 
 ```toml
-[ports]
-count = 1
+ports = 2
+
+[setup]
+run = "pnpm install --frozen-lockfile"
+cache_key = ["pnpm-lock.yaml"]
+seed_files = [".env.local"]
 
 [env]
 PORT = "{port}"
+API_PORT = "{port+1}"
 ```
 
 ::
@@ -193,7 +198,7 @@ PORT = "{port}"
 Isolated [by construction]{.text-primary}
 
 #description
-Three branches can run at once without fighting over a port or a node_modules.
+Three branches can run at once without fighting over a port, a node_modules, or a database file.
 
 #features
   :::u-page-feature
@@ -205,7 +210,19 @@ Three branches can run at once without fighting over a port or a node_modules.
   A port of its own
 
   #description
-  uxd allocates free ports, exported as `$UXD_PORT` and templated into your commands.
+  uxd allocates a contiguous block of free ports per workspace. `ports = 2` gets you `{port}` and `{port+1}`, exported and templated into your commands.
+  :::
+
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-sprout
+  ---
+  #title
+  Seed files land on their own
+
+  #description
+  `.env.local`, local certificates, scratch config — copied into every new worktree from your seeds directory, and never overwritten. [Seed local files](/docs/guides/seed-local-files).
   :::
 
   :::u-page-feature
@@ -222,7 +239,89 @@ Three branches can run at once without fighting over a port or a node_modules.
 ::
 
 <!--
-Section 4 — Lifecycle ------------------------------------------------------------------------------
+Section 4 — Environment ----------------------------------------------------------------------------
+-->
+
+::u-page-section{class="border-t border-default" orientation="horizontal"}
+
+::browser-frame
+---
+title: uxd my-project feat/login run dev --dry-run
+---
+
+```bash
+export UXD_PATH=~/dev/uxd/my-project/trees/feat-login
+export UXD_REPO_PATH=~/dev/uxd/my-project/repo
+export UXD_DATA_DIR=~/dev/uxd/my-project/trees/.data/feat-login
+export UXD_PROJECT=my-project
+export UXD_REF=feat/login
+export UXD_BRANCH=feat/login
+export UXD_SLUG=feat-login
+export UXD_PORT=3053
+export PORT=3053
+bash -c 'pnpm dev "$@"' uxd
+```
+
+::
+
+#title
+Every command knows [where it is]{.text-primary}
+
+#description
+Paths, ports and your own variables are resolved before anything runs — and you can read the whole environment back before you commit to it.
+
+#features
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-variable
+  ---
+  #title
+  `UXD_*` in every child process
+
+  #description
+  `run`, `exec`, `shell`, `[setup]` and hooks all receive `UXD_PATH`, `UXD_PORT`, `UXD_DATA_DIR`, `UXD_BRANCH` and the rest — whether your config mentions them or not.
+  :::
+
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-braces
+  ---
+  #title
+  Template variables
+
+  #description
+  `{port}`, `{port+1}`, `{path}`, `{data_dir}`, `{branch}` and more interpolate into `[env]` values, commands, hooks and editor templates. [Template variables](/docs/configuration/environment-and-templates).
+  :::
+
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-layers
+  ---
+  #title
+  Layered, and overridable
+
+  #description
+  Your `[env]` sits over the `UXD_*` block, a command's own `env` over that, and `--env K=V` wins on the command line.
+  :::
+
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-eye
+  ---
+  #title
+  Read it before you run it
+
+  #description
+  `--dry-run` prints the resolved environment as `export` lines followed by the shell-quoted command. Nothing spawns.
+  :::
+::
+
+<!--
+Section 5 — Lifecycle ------------------------------------------------------------------------------
 -->
 
 ::u-page-section{class="border-t border-default"}
@@ -260,6 +359,30 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   :::u-page-feature
   ---
   as: li
+  icon: i-lucide-refresh-cw
+  ---
+  #title
+  Refresh without rebuilding
+
+  #description
+  `sync` resets a workspace to its ref — `--stash` or `--discard` for local changes, `--fresh` to re-materialize from scratch.
+  :::
+
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-webhook
+  ---
+  #title
+  Your steps at every seam
+
+  #description
+  `post_checkout`, `pre_run`, `post_sync`, `pre_clean` — start a container, drop a scratch database, or veto a removal. [Commands & hooks](/docs/configuration/commands-and-hooks).
+  :::
+
+  :::u-page-feature
+  ---
+  as: li
   icon: i-lucide-trash-2
   ---
   #title
@@ -268,10 +391,22 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   #description
   `clean --merged`, `--closed`, `--older-than 7d`. Prints a plan, asks first, skips dirty trees.
   :::
+
+  :::u-page-feature
+  ---
+  as: li
+  icon: i-lucide-file-json
+  ---
+  #title
+  Made to be scripted
+
+  #description
+  `--json` on `checkout`, `list`, `info` and `projects`, with progress on stderr — so `cd "$(uxd my-project 42)"` just works. [Script with uxd](/docs/guides/script-with-uxd).
+  :::
 ::
 
 <!--
-Section 5 — Requirements ---------------------------------------------------------------------------
+Section 6 — Requirements ---------------------------------------------------------------------------
 -->
 
 ::u-page-section{class="border-t border-default"}
@@ -351,8 +486,7 @@ Materialize your first workspace
   class: w-full justify-center sm:w-auto
   color: neutral
   size: xl
-  target: _blank
-  to: https://github.com/uxfront-com/uxd#commands
+  to: /docs/cli/overview
   variant: outline
   ---
   CLI reference
