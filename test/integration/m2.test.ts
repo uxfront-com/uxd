@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { makeEnv, makeFixtureOrigin, fakeGh, type Harness } from "../fixtures.ts";
@@ -16,7 +16,9 @@ let origin: ReturnType<typeof makeFixtureOrigin>;
 let env: Harness;
 
 beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), "uxd-m2-"));
+  // realpath: on macOS $TMPDIR is a symlink (/var → /private/var) and git prints
+  // resolved worktree paths, which would not compare equal to the config paths.
+  tmp = realpathSync(mkdtempSync(join(tmpdir(), "uxd-m2-")));
   origin = makeFixtureOrigin(tmp);
   origin.commit("main", { "README.md": "# fixture\n" });
   origin.commit("feature-x", { "feat.txt": "hello\n" });
@@ -112,7 +114,60 @@ describe("§17.2 scenario 12 — list --json shape & doctor fix hint", () => {
     expect(check?.detail).toContain("config");
     expect(check?.detail).toContain("remote.origin.fetch");
   });
+
+  it("doctor warns about a hand-deleted worktree git has not pruned yet", async () => {
+    await env.run(["n8n", "feature-x", "checkout"]);
+    const wt = join(env.worktreesPath("n8n"), "feature-x");
+    expect(existsSync(wt)).toBe(true);
+    rmSync(wt, { recursive: true, force: true });
+    // git still lists the worktree until `git worktree prune` runs — that is the
+    // exact drift the disk check exists to catch.
+    const listed = spawnSync("git", ["-C", env.repoPath("n8n"), "worktree", "list"]).stdout.toString();
+    expect(listed).toContain(wt);
+
+    const r = await env.run(["--json", "doctor"]);
+    const report = JSON.parse(r.stdout) as { checks: Array<{ name: string; status: string; detail: string }> };
+    const check = report.checks.find((c) => c.name.includes("worktrees"));
+    expect(check?.status).toBe("warn");
+    expect(check?.detail).toContain("1 state entry");
+    expect(check?.detail).toContain("clean --prune-state");
+  });
+
+  it("doctor reports a healthy tree with no worktree drift", async () => {
+    await env.run(["n8n", "feature-x", "checkout"]);
+    const r = await env.run(["--json", "doctor"]);
+    const report = JSON.parse(r.stdout) as { checks: Array<{ name: string }> };
+    expect(report.checks.find((c) => c.name.includes("worktrees"))).toBeUndefined();
+  });
+
+  it("doctor resolves an absolute editor binary and names it consistently", async () => {
+    const e = makeEnv(tmp, { term: { repo: origin.url, extraToml: 'editor = "terminal"' } });
+    const prev = process.env.SHELL;
+    try {
+      // The `terminal` preset resolves to $SHELL, always an absolute path.
+      process.env.SHELL = process.execPath;
+      let report = JSON.parse((await e.run(["--json", "doctor"])).stdout) as Report;
+      let check = report.checks.find((c) => c.name === "project term: editor");
+      expect(check?.status).toBe("ok");
+      expect(check?.detail).toContain(process.execPath);
+
+      process.env.SHELL = join(tmp, "no-such-shell");
+      report = JSON.parse((await e.run(["--json", "doctor"])).stdout) as Report;
+      check = report.checks.find((c) => c.name === "project term: editor");
+      expect(check?.status).toBe("warn");
+      // Both halves of the message must name the same binary — never a hardcoded 'code'.
+      expect(check?.detail).toContain(join(tmp, "no-such-shell"));
+      expect(check?.detail).not.toContain("code");
+    } finally {
+      if (prev === undefined) delete process.env.SHELL;
+      else process.env.SHELL = prev;
+    }
+  });
 });
+
+interface Report {
+  checks: Array<{ name: string; status: string; detail: string }>;
+}
 
 describe("gh-driven paths (fake gh client)", () => {
   it("list surfaces PR state + CI from a fresh gh view", async () => {

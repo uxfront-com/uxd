@@ -609,10 +609,10 @@ Runs the checks below; each prints `ok` / `warn` / `fail` + one-line detail to s
 | each project config schema-valid | fail, per file |
 | `repo_path` parent writable / repo healthy (`git rev-parse --is-bare-repository`) | fail |
 | bare repo fetch refspec configured (§7.1) | fail with the exact `git config` fix |
-| editor binary resolvable on PATH | warn |
+| editor binary resolvable (PATH lookup, or in place when the preset yields a path such as `$SHELL`) | warn |
 | state dir writable; state files parse | fail |
 | stale lock files | warn (with steal hint) |
-| orphaned worktrees (`git worktree list` entries missing from state, and vice versa) | warn, hint `clean --prune-state` |
+| orphaned worktrees (`git worktree list` entries missing from state, tracked entries git no longer knows, and tracked entries whose directory is gone from disk — git does not auto-prune, so the disk check is what catches a hand-`rm -rf`) | warn, hint `clean --prune-state` |
 | configured command name shadows a built-in verb | warn |
 | repo `core.hooksPath` set to a path outside the repo / husky installed | warn (hooks may misbehave in worktrees) |
 
