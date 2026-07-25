@@ -1,2 +1,48 @@
+packages:
+  - apps/*
+
 allowBuilds:
   esbuild: true
+
+catalog:
+  defu: 6.1.7
+  scule: ^1.3.0
+  zod: ^4.4.3
+
+catalogs:
+  nuxt:
+    '@iconify-json/lucide': 1.2.112
+    '@iconify-json/simple-icons': 1.2.86
+    '@nuxt/content': 3.14.0
+    '@nuxt/fonts': 0.14.0
+    '@nuxt/image': 1.11.0
+    '@nuxt/kit': 4.4.8
+    '@nuxt/scripts': 0.11.13
+    '@nuxt/test-utils': 3.19.2
+    '@nuxt/ui': 4.8.2
+    '@nuxtjs/i18n': 10.4.0
+    '@nuxtjs/mdc': 0.22.0
+    '@nuxtjs/robots': 6.1.1
+    '@nuxtjs/sitemap': 8.2.1
+    '@unhead/vue': 2.0.19
+    '@vueuse/core': 14.3.0
+    better-sqlite3: ^12.10.1
+    motion-v: 1.7.2
+    nuxt: 4.4.8
+    nuxt-llms: 0.2.0
+    posthog-js: 1.386.6
+    tailwindcss: 4.3.1
+    typescript: ^6.0.3
+    ufo: 1.6.4
+    vue: ^3.5.38
+    vue-router: 4.5.1
+    vue-tsc: ^3.3.5
+
+onlyBuiltDependencies:
+  - '@parcel/watcher'
+  - '@tailwindcss/oxide'
+  - better-sqlite3
+  - esbuild
+  - sharp
+  - unrs-resolver
+  - vue-demi

@@ -1,0 +1,25 @@
+# Nixpacks build config for @uxfront/docs (Nuxt, node-server output).
+#
+# Build from the monorepo root so pnpm can resolve the workspace and the single
+# root lockfile. Point the platform at this file with NIXPACKS_CONFIG_FILE:
+#   Dokploy/Railway: Build Type "Nixpacks", root / context ".",
+#   env NIXPACKS_CONFIG_FILE=apps/docs/nixpacks.toml, container port 3000.
+
+[phases.install]
+cmds = [
+    'pnpm install --frozen-lockfile --filter @uxfront/docs',
+]
+
+[phases.build]
+dependsOn = ['install']
+# The prerenderer needs more heap than node's default in memory-limited builders.
+cmds = ['NODE_OPTIONS=--max-old-space-size=4096 pnpm --filter @uxfront/docs run build']
+
+[variables]
+NUXT_TELEMETRY_DISABLED = '1'
+HOST = '0.0.0.0'
+PORT = '3000'
+
+# Nuxt Content creates its SQLite database inside .output/server at runtime.
+[start]
+cmd = 'node apps/docs/.output/server/index.mjs'

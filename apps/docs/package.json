@@ -1,0 +1,50 @@
+{
+	"name": "@uxfront/docs",
+	"type": "module",
+	"private": true,
+	"version": "0.0.0",
+	"scripts": {
+		"build": "nuxt build",
+		"dev": "nuxt dev",
+		"generate": "nuxt generate",
+		"preview": "nuxt preview",
+		"typecheck": "nuxt typecheck",
+		"test": "vitest run",
+		"postinstall": "nuxt prepare"
+	},
+	"dependencies": {
+		"@nuxt/content": "catalog:nuxt",
+		"@nuxt/fonts": "catalog:nuxt",
+		"@nuxt/image": "catalog:nuxt",
+		"@nuxt/scripts": "catalog:nuxt",
+		"@nuxt/ui": "catalog:nuxt",
+		"@nuxtjs/i18n": "catalog:nuxt",
+		"@nuxtjs/mdc": "catalog:nuxt",
+		"@nuxtjs/robots": "catalog:nuxt",
+		"@nuxtjs/sitemap": "catalog:nuxt",
+		"@unhead/vue": "catalog:nuxt",
+		"@uxfront/layer-docs": "^0.1.0",
+		"@vueuse/core": "catalog:nuxt",
+		"defu": "catalog:",
+		"motion-v": "catalog:nuxt",
+		"nuxt": "catalog:nuxt",
+		"nuxt-llms": "catalog:nuxt",
+		"posthog-js": "catalog:nuxt",
+		"scule": "catalog:",
+		"ufo": "catalog:nuxt",
+		"vue": "catalog:nuxt",
+		"vue-router": "catalog:nuxt",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@iconify-json/lucide": "catalog:nuxt",
+		"@iconify-json/simple-icons": "catalog:nuxt",
+		"@nuxt/kit": "catalog:nuxt",
+		"@nuxt/test-utils": "catalog:nuxt",
+		"better-sqlite3": "catalog:nuxt",
+		"tailwindcss": "catalog:nuxt",
+		"typescript": "catalog:nuxt",
+		"vitest": "^4.1.8",
+		"vue-tsc": "catalog:nuxt"
+	}
+}
