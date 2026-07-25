@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+	DOCS_GROUP_ENTRY_PATHS,
+	DOCS_GROUP_FOLDERS,
 	DOCS_SECTIONS,
 	DOCS_SECTION_ENTRY_PATHS,
 	DOCS_SECTION_SLUGS,
@@ -14,9 +16,26 @@ const contentRoot = resolve(
 	"../content/docs",
 );
 
+/** `01.introduction.md` → `introduction` */
+function pageSlugs(folder: string): string[] {
+	return readdirSync(resolve(contentRoot, folder))
+		.filter((file) => file.endsWith(".md"))
+		.map((file) => file.replace(/^\d+\.|\.md$/g, ""));
+}
+
 describe("docs sections", () => {
-	it("exposes the four documentation sections", () => {
-		expect(DOCS_SECTION_SLUGS).toEqual([
+	it("exposes exactly one section, so no sub-header tabs are needed", () => {
+		expect(DOCS_SECTION_SLUGS).toEqual(["uxd"]);
+	});
+
+	it("resolves the section by slug", () => {
+		expect(findDocsSectionBySlug("uxd")?.key).toBe("docs");
+		expect(findDocsSectionBySlug("missing")).toBeUndefined();
+	});
+
+	it("sources the section from every sidebar group folder, in order", () => {
+		expect(DOCS_SECTIONS[0].folder).toBe(DOCS_GROUP_FOLDERS);
+		expect(DOCS_GROUP_FOLDERS).toEqual([
 			"getting-started",
 			"guides",
 			"cli",
@@ -24,37 +43,33 @@ describe("docs sections", () => {
 		]);
 	});
 
-	it("resolves a section by slug", () => {
-		expect(findDocsSectionBySlug("getting-started")?.key).toBe(
-			"gettingStarted",
-		);
-		expect(findDocsSectionBySlug("missing")).toBeUndefined();
-	});
-
-	it("uses unique keys and folders", () => {
-		const keys = DOCS_SECTIONS.map((section) => section.key);
-		const folders = DOCS_SECTIONS.map((section) => section.folder);
-		expect(new Set(keys).size).toBe(keys.length);
-		expect(new Set(folders).size).toBe(folders.length);
-	});
-
-	it("backs every section with a content folder", () => {
-		for (const section of DOCS_SECTIONS) {
-			expect(existsSync(resolve(contentRoot, section.folder))).toBe(true);
+	it("backs every sidebar group with a content folder and a nav title", () => {
+		for (const folder of DOCS_GROUP_FOLDERS) {
+			expect(existsSync(resolve(contentRoot, folder))).toBe(true);
+			expect(existsSync(resolve(contentRoot, folder, ".navigation.yml"))).toBe(
+				true,
+			);
 		}
 	});
 
-	it("points each entry path at a page that exists", () => {
-		for (const section of DOCS_SECTIONS) {
-			const entry = DOCS_SECTION_ENTRY_PATHS[section.slug];
-			expect(entry.startsWith(`/docs/${section.slug}/`)).toBe(true);
+	it("points the section entry path at a page that exists", () => {
+		const entry = DOCS_SECTION_ENTRY_PATHS.uxd;
+		expect(entry).toBe(DOCS_GROUP_ENTRY_PATHS["getting-started"]);
+		expect(pageSlugs("getting-started")).toContain(
+			entry.replace("/docs/uxd/getting-started/", ""),
+		);
+	});
 
-			// `01.introduction.md` → `/docs/getting-started/introduction`
-			const page = entry.slice(`/docs/${section.slug}/`.length);
-			const files = readdirSync(resolve(contentRoot, section.folder));
-			expect(files.map((file) => file.replace(/^\d+\.|\.md$/g, ""))).toContain(
-				page,
-			);
+	it("points each group entry path at a page that exists", () => {
+		expect(Object.keys(DOCS_GROUP_ENTRY_PATHS)).toEqual(DOCS_GROUP_FOLDERS);
+
+		for (const folder of DOCS_GROUP_FOLDERS) {
+			const prefix = `/docs/uxd/${folder}/`;
+			const entry =
+				DOCS_GROUP_ENTRY_PATHS[folder as keyof typeof DOCS_GROUP_ENTRY_PATHS];
+
+			expect(entry.startsWith(prefix)).toBe(true);
+			expect(pageSlugs(folder)).toContain(entry.slice(prefix.length));
 		}
 	});
 });

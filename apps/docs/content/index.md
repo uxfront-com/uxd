@@ -46,7 +46,7 @@ uxd turns a PR number, a branch, a commit, a URL, or a path into an isolated git
   class: w-full justify-center sm:w-auto
   color: primary
   size: xl
-  to: /docs/getting-started
+  to: /docs/uxd/getting-started/introduction
   trailing-icon: i-lucide-arrow-right
   ---
   Get started
@@ -340,7 +340,7 @@ Materialize your first workspace
   class: w-full justify-center sm:w-auto
   color: primary
   size: xl
-  to: /docs/getting-started
+  to: /docs/uxd/getting-started/introduction
   trailing-icon: i-lucide-arrow-right
   ---
   Get started
