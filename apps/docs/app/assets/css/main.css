@@ -18,3 +18,44 @@
  */
 @source "../../../content/**/*";
 @source "../../app.config.ts";
+
+/*
+ * Nuxt UI generates its component themes into `.nuxt/ui/*.ts` at build time.
+ * Neither the layer's `@source` globs nor this app's covered that directory, so
+ * any utility that appears ONLY inside a generated theme was never emitted.
+ * `focus-visible:outline-primary` is one of them — without it every button and
+ * link on the site fell back to `outline-color: currentColor`, measured at
+ * 1.07:1 (light) and 1.48:1 (dark) against the hero. An invisible focus ring
+ * fails WCAG 1.4.11 / 2.4.11.
+ */
+@source "../../../.nuxt/ui/**/*.ts";
+
+/*
+ * WCAG 1.4.3 / 1.4.11 — the `--ui-primary` mapping.
+ *
+ * @uxfront/layer-docs leaves the brand palette to the consuming app ("the
+ * `--ui-primary` mapping is consumer-supplied"), so Nuxt UI's stock light-mode
+ * default of `primary-500` was in force. uxd's primary is `green`, and green-500
+ * is oklch(72.3%) — far too light to carry white text or to draw a focus ring on
+ * a white page. Measured against that default:
+ *
+ *   - primary button label (white on green-500) ...... 2.22:1  (needs 4.5:1)
+ *   - `[text]{.text-primary}` emphasis on white ....... 2.24:1  (needs 3:1 large)
+ *   - focus ring against the hero gradient ........... 2.00:1  (needs 3:1)
+ *
+ * Stepping light mode down to green-700 fixes all three at once — 4.94:1, 4.94:1
+ * and 4.45:1 respectively — and is a token-to-token remap, not a one-off colour.
+ * Dark mode keeps Nuxt UI's `primary-400`, which already measured 10.02:1 for the
+ * button label and 6.37:1 for the ring against the gradient.
+ *
+ * Both selectors are restated because `:root` and `.dark` have equal specificity;
+ * declaring only `:root` here would out-order Nuxt UI's own `.dark` mapping and
+ * darken the palette in both modes.
+ */
+:root {
+	--ui-primary: var(--ui-color-primary-700);
+}
+
+.dark {
+	--ui-primary: var(--ui-color-primary-400);
+}
