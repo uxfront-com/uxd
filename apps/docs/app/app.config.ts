@@ -30,7 +30,8 @@ export default defineAppConfig({
 		links: [
 			{
 				label: "Docs",
-				to: "/docs/getting-started",
+				// `/docs` redirects to the first Getting Started page.
+				to: "/docs",
 				activeMatch: "/docs",
 			},
 		],
@@ -47,10 +48,23 @@ export default defineAppConfig({
 	},
 	toc: {
 		title: "On this page",
-		// Right-aside "resources" panel — hidden until links are added.
+		// Right-aside "resources" panel.
 		bottom: {
 			title: "Resources",
-			links: [] as Array<{
+			links: [
+				{
+					icon: "i-simple-icons-github",
+					label: "uxd on GitHub",
+					to: "https://github.com/uxfront-com/uxd",
+					target: "_blank",
+				},
+				{
+					icon: "i-lucide-bug",
+					label: "Report an issue",
+					to: "https://github.com/uxfront-com/uxd/issues",
+					target: "_blank",
+				},
+			] as Array<{
 				icon: string;
 				label: string;
 				to: string;

@@ -1,4 +1,8 @@
 import { useNuxt } from "@nuxt/kit";
+import {
+	DOCS_SECTION_ENTRY_PATHS,
+	DOCS_SECTIONS,
+} from "./app/constants/sections";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -24,16 +28,24 @@ export default defineNuxtConfig({
 		name: "uxfront — Documentation",
 	},
 
+	// Section roots carry no page of their own — the sidebar is built from the
+	// children of `/docs/<slug>`, so an `index.md` there would be invisible in
+	// the nav. `/docs` and every section root therefore redirect to that
+	// section's first page.
 	routeRules: {
-		"/docs": {
-			redirect: "/docs/getting-started",
-		},
+		"/docs": { redirect: DOCS_SECTION_ENTRY_PATHS["getting-started"] },
+		...Object.fromEntries(
+			DOCS_SECTIONS.map((section) => [
+				`/docs/${section.slug}`,
+				{ redirect: DOCS_SECTION_ENTRY_PATHS[section.slug] },
+			]),
+		),
 	},
 
 	nitro: {
 		prerender: {
-			// The layer seeds "/"; make sure the docs entry point is baked too.
-			routes: ["/docs/getting-started"],
+			// The layer seeds "/"; make sure each section's entry page is baked too.
+			routes: Object.values(DOCS_SECTION_ENTRY_PATHS),
 		},
 	},
 
