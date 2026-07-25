@@ -19,11 +19,19 @@ export default defineAppConfig({
 		description: "The UI UX DX platform documentation.",
 	},
 	header: {
-		title: "uxfront",
+		title: "uxd",
+		// Renders "uxd by UXFront" in the navbar. Only "UXFront" is a link, so
+		// the link's accessible name is the brand alone; "by" stays plain text.
+		// The wordmark keeps the header's existing link to the homepage.
+		attribution: {
+			prefix: "by",
+			label: "UXFront",
+			to: "https://uxfront.com",
+		},
 		// No logo asset in the scaffold; empty paths make the header render the
 		// title text. Drop real light/dark logo paths here when they exist.
 		logo: {
-			alt: "uxfront",
+			alt: "uxd",
 			light: "",
 			dark: "",
 		},
