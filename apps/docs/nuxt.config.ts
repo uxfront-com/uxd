@@ -1,5 +1,6 @@
 import { useNuxt } from "@nuxt/kit";
 import {
+	DOCS_GROUP_ENTRY_PATHS,
 	DOCS_SECTION_ENTRY_PATHS,
 	DOCS_SECTIONS,
 } from "./app/constants/sections";
@@ -64,23 +65,42 @@ export default defineNuxtConfig({
 		name: "uxfront — Documentation",
 	},
 
-	// Section roots carry no page of their own — the sidebar is built from the
-	// children of `/docs/<slug>`, so an `index.md` there would be invisible in
-	// the nav. `/docs` and every section root therefore redirect to that
-	// section's first page.
+	// Neither the section root nor a group root carries a page of its own — each
+	// level's nav is built from its children, so an `index.md` there would be
+	// invisible. Every such root redirects to the first page below it.
+	//
+	// The `/docs/<folder>` rules are legacy: before the docs collapsed to one
+	// section each folder WAS a top-level section and owned that URL. They are
+	// kept so old links (the homepage CTA, bookmarks) keep landing on content.
 	routeRules: {
-		"/docs": { redirect: DOCS_SECTION_ENTRY_PATHS["getting-started"] },
+		"/docs": { redirect: DOCS_SECTION_ENTRY_PATHS.uxd },
 		...Object.fromEntries(
 			DOCS_SECTIONS.map((section) => [
 				`/docs/${section.slug}`,
 				{ redirect: DOCS_SECTION_ENTRY_PATHS[section.slug] },
 			]),
 		),
+		...Object.fromEntries(
+			Object.entries(DOCS_GROUP_ENTRY_PATHS).flatMap(([folder, entry]) => [
+				// Group root, e.g. `/docs/uxd/cli` → first page in the group.
+				[`/docs/${DOCS_SECTIONS[0].slug}/${folder}`, { redirect: entry }],
+				// Legacy section root, e.g. `/docs/cli` → same first page.
+				[`/docs/${folder}`, { redirect: entry }],
+				// Legacy page URLs, e.g. `/docs/cli/exit-codes` →
+				// `/docs/uxd/cli/exit-codes`. The `**` splat is forwarded.
+				[
+					`/docs/${folder}/**`,
+					{ redirect: `/docs/${DOCS_SECTIONS[0].slug}/${folder}/**` },
+				],
+			]),
+		),
 	},
 
 	nitro: {
 		prerender: {
-			// The layer seeds "/"; make sure each section's entry page is baked too.
+			// The layer seeds "/" and crawls links from there; seed the docs entry
+			// page too so the whole `/docs` tree is reachable by the crawler even if
+			// the homepage CTA ever stops pointing at it.
 			routes: Object.values(DOCS_SECTION_ENTRY_PATHS),
 		},
 	},

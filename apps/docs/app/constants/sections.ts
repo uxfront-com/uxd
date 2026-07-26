@@ -1,39 +1,42 @@
 /**
  * Documentation information architecture.
  *
- * Each entry becomes a top-level tab in the docs sub-header, a Nuxt Content
- * collection (`docs_<key>`), and a sidebar tree built from the files under
- * `content/docs/<folder>/`. Sections follow the reader's journey: learn it,
- * do a task with it, look a command up, configure it.
+ * uxd's documentation is a **single** section. The reader's journey — learn it,
+ * do a task with it, look a command up, configure it — survives as the four
+ * sidebar groups listed in {@link DOCS_GROUP_FOLDERS}, not as top-level tabs:
+ * with one section there is nothing to switch between, so the section
+ * sub-header has no reason to exist.
+ *
+ * The layer builds everything from the descriptor below: one Nuxt Content
+ * collection (`docs_docs`) sourced from every folder in `folder`, and a sidebar
+ * tree whose top level is those folders in array order.
  */
+
+/**
+ * Sidebar groups, in reading order, as folder names under `content/docs/`.
+ *
+ * Array order is the sidebar order — it is not alphabetical and must not be
+ * sorted. Each folder carries a `.navigation.yml` supplying the group's label.
+ * Each name is also the second URL segment: `/docs/uxd/<folder>/<page>`.
+ *
+ * Typed as mutable `string[]` (not a `readonly` tuple) so the object below
+ * still satisfies the layer's `DocsSectionDescriptor.folder: string | string[]`
+ * under `as const`.
+ */
+export const DOCS_GROUP_FOLDERS: string[] = [
+	"getting-started",
+	"guides",
+	"cli",
+	"configuration",
+];
+
 export const DOCS_SECTIONS = [
 	{
-		key: "gettingStarted",
-		slug: "getting-started",
-		folder: "getting-started",
-		label: "Getting Started",
-		icon: "i-lucide-rocket",
-	},
-	{
-		key: "guides",
-		slug: "guides",
-		folder: "guides",
-		label: "Guides",
+		key: "docs",
+		slug: "uxd",
+		folder: DOCS_GROUP_FOLDERS,
+		label: "Documentation",
 		icon: "i-lucide-book-open",
-	},
-	{
-		key: "cli",
-		slug: "cli",
-		folder: "cli",
-		label: "CLI Reference",
-		icon: "i-lucide-terminal",
-	},
-	{
-		key: "configuration",
-		slug: "configuration",
-		folder: "configuration",
-		label: "Configuration",
-		icon: "i-lucide-settings",
 	},
 ] as const;
 
@@ -42,15 +45,27 @@ export type DocsSectionKey = DocsSection["key"];
 export type DocsSectionSlug = DocsSection["slug"];
 
 /**
- * First page of each section. Section roots (`/docs/<slug>`) carry no page of
- * their own, so `/docs` and each section root redirect here.
+ * First page of the section. The section root (`/docs/uxd`) carries no page of
+ * its own — the sidebar is built from its children — so `/docs` and
+ * `/docs/uxd` both redirect here.
  */
 export const DOCS_SECTION_ENTRY_PATHS = {
-	"getting-started": "/docs/getting-started/introduction",
-	guides: "/docs/guides/review-a-pull-request",
-	cli: "/docs/cli/overview",
-	configuration: "/docs/configuration/overview",
+	uxd: "/docs/uxd/getting-started/introduction",
 } as const satisfies Record<DocsSectionSlug, string>;
+
+/**
+ * First page of each sidebar group, keyed by folder name.
+ *
+ * Two jobs: it gives every group root (`/docs/uxd/<folder>`, which has no page
+ * of its own) a redirect target, and it gives the pre-consolidation URLs
+ * (`/docs/<folder>`, when each folder was its own section) somewhere to land.
+ */
+export const DOCS_GROUP_ENTRY_PATHS = {
+	"getting-started": "/docs/uxd/getting-started/introduction",
+	guides: "/docs/uxd/guides/review-a-pull-request",
+	cli: "/docs/uxd/cli/overview",
+	configuration: "/docs/uxd/configuration/overview",
+} as const satisfies Record<string, string>;
 
 export const DOCS_SECTION_SLUGS = DOCS_SECTIONS.map(
 	(section) => section.slug,
