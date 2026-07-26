@@ -1,9 +1,9 @@
 ---
 title: uxd
-description: Turn any git ref into a running local workspace with one command.
+description: Run any pull request or branch locally, without disturbing the work you already have open.
 seo:
-  title: uxd — run any git ref locally in one command
-  description: uxd turns a PR number, a branch, a commit, a URL, or a path into an isolated git worktree with dependencies installed, ports allocated, and a dev server up.
+  title: uxd — run any pull request or branch locally, in one command
+  description: Point uxd at a pull request, a branch, a commit or a link. You get the code checked out, dependencies installed and a port of your own, while everything you already had open stays untouched.
 navigation: false
 ---
 
@@ -38,7 +38,7 @@ unpack · execute · debug
 Any git ref, running locally in [one command]{.text-primary}
 
 #description
-uxd turns a PR number, a branch, a commit, a URL, or a path into an isolated git worktree — dependencies installed, ports allocated, dev server up.
+Point uxd at a pull request, a branch, or a link someone pasted in chat. You get the code checked out, dependencies installed, and a port of your own — while the work you already have open stays exactly where it is.
 
 #links
   :::u-button
@@ -75,7 +75,7 @@ Section 1 — The pipeline -----------------------------------------------------
 Every command is the same three steps
 
 #description
-One pipeline behind every verb. Learn it once and the whole CLI is predictable.
+Learn it once and the whole tool is predictable. There is no special case to remember.
 
 #features
   :::u-page-feature
@@ -87,7 +87,7 @@ One pipeline behind every verb. Learn it once and the whole CLI is predictable.
   [resolve]{.text-primary} the ref
 
   #description
-  A PR number, a branch, a 40-char SHA, a URL, or a local path becomes one concrete git target. First match wins.
+  You point at something — a pull request number, a branch, a commit, a link from chat. uxd works out what you meant.
   :::
 
   :::u-page-feature
@@ -99,7 +99,7 @@ One pipeline behind every verb. Learn it once and the whole CLI is predictable.
   [materialize]{.text-primary} the workspace
 
   #description
-  A worktree exists, with dependencies installed, seed files copied, ports allocated, and the environment computed. Idempotent — and cheap when it already exists.
+  A folder appears with the code checked out, dependencies installed, your local files copied in, and a free port reserved. Ask again and you get the same folder back straight away.
   :::
 
   :::u-page-feature
@@ -111,7 +111,7 @@ One pipeline behind every verb. Learn it once and the whole CLI is predictable.
   [act]{.text-primary} on it
 
   #description
-  Open an editor, run a configured command, exec, drop into a shell, diff, or sync. `checkout` is this pipeline with a no-op act step.
+  Open your editor, start the dev server, run a one-off command, or just print the path. Whatever you asked for, the workspace is ready before it runs.
   :::
 ::
 
@@ -152,7 +152,7 @@ If you can point at it, uxd can run it. No cloning, no stashing, no "let me fini
   Six kinds of ref
 
   #description
-  PR numbers, branches, SHAs, GitHub URLs, local paths, and `-` for the last ref you used.
+  Pull request numbers, branch names, commit hashes, GitHub links, local paths — and a dash when you mean the one you were just on.
   :::
 
   :::u-page-feature
@@ -161,10 +161,10 @@ If you can point at it, uxd can run it. No cloning, no stashing, no "let me fini
   icon: i-lucide-link
   ---
   #title
-  Paste the URL
+  Paste the link
 
   #description
-  A GitHub PR or tree URL carries the project and the ref, so one argument is the whole command.
+  A GitHub link already says which project and which pull request. Paste it in and that is the entire command.
   :::
 ::
 
@@ -195,10 +195,10 @@ API_PORT = "{port+1}"
 ::
 
 #title
-Isolated [by construction]{.text-primary}
+Run three at once, [nothing collides]{.text-primary}
 
 #description
-Three branches can run at once without fighting over a port, a node_modules, or a database file.
+Three branches can run at the same time without fighting over a port, a node_modules, or a database file.
 
 #features
   :::u-page-feature
@@ -210,7 +210,7 @@ Three branches can run at once without fighting over a port, a node_modules, or 
   A port of its own
 
   #description
-  uxd allocates a contiguous block of free ports per workspace. `ports = 2` gets you `{port}` and `{port+1}`, exported and templated into your commands.
+  Every workspace gets its own free ports, and uxd hands them to your commands. Ask for two if your app needs an API alongside it.
   :::
 
   :::u-page-feature
@@ -219,10 +219,10 @@ Three branches can run at once without fighting over a port, a node_modules, or 
   icon: i-lucide-sprout
   ---
   #title
-  Seed files land on their own
+  The files git never sees
 
   #description
-  `.env.local`, local certificates, scratch config — copied into every new worktree from your seeds directory, and never overwritten. [Seed local files](/docs/guides/seed-local-files).
+  Your local env file, a certificate, a scratch config — copied into every new workspace, and never written over one you already have. [How seeding works](/docs/guides/seed-local-files).
   :::
 
   :::u-page-feature
@@ -234,7 +234,7 @@ Three branches can run at once without fighting over a port, a node_modules, or 
   Setup that remembers
 
   #description
-  `cache_key` globs mean installs rerun only when the lockfile actually moves.
+  Dependencies install on the first checkout and stay installed. uxd only runs them again when your lockfile actually changes.
   :::
 ::
 
@@ -242,33 +242,12 @@ Three branches can run at once without fighting over a port, a node_modules, or 
 Section 4 — Environment ----------------------------------------------------------------------------
 -->
 
-::u-page-section{class="border-t border-default" orientation="horizontal"}
-
-::browser-frame
----
-title: uxd my-project feat/login run dev --dry-run
----
-
-```bash
-export UXD_PATH=~/dev/uxd/my-project/trees/feat-login
-export UXD_REPO_PATH=~/dev/uxd/my-project/repo
-export UXD_DATA_DIR=~/dev/uxd/my-project/trees/.data/feat-login
-export UXD_PROJECT=my-project
-export UXD_REF=feat/login
-export UXD_BRANCH=feat/login
-export UXD_SLUG=feat-login
-export UXD_PORT=3053
-export PORT=3053
-bash -c 'pnpm dev "$@"' uxd
-```
-
-::
-
+::u-page-section{class="border-t border-default"}
 #title
-Every command knows [where it is]{.text-primary}
+Your commands know [where they are]{.text-primary}
 
 #description
-Paths, ports and your own variables are resolved before anything runs — and you can read the whole environment back before you commit to it.
+Paths, ports and your own variables are worked out before anything runs, so one command behaves correctly in every workspace.
 
 #features
   :::u-page-feature
@@ -277,10 +256,10 @@ Paths, ports and your own variables are resolved before anything runs — and yo
   icon: i-lucide-variable
   ---
   #title
-  `UXD_*` in every child process
+  The details, handed over
 
   #description
-  `run`, `exec`, `shell`, `[setup]` and hooks all receive `UXD_PATH`, `UXD_PORT`, `UXD_DATA_DIR`, `UXD_BRANCH` and the rest — whether your config mentions them or not.
+  Everything uxd runs for you — setup, hooks, your dev server, a shell — is told the workspace's path, ports, branch and data directory. Anything you set yourself sits on top and wins.
   :::
 
   :::u-page-feature
@@ -289,22 +268,10 @@ Paths, ports and your own variables are resolved before anything runs — and yo
   icon: i-lucide-braces
   ---
   #title
-  Template variables
+  Write it once, with placeholders
 
   #description
-  `{port}`, `{port+1}`, `{path}`, `{data_dir}`, `{branch}` and more interpolate into `[env]` values, commands, hooks and editor templates. [Template variables](/docs/configuration/environment-and-templates).
-  :::
-
-  :::u-page-feature
-  ---
-  as: li
-  icon: i-lucide-layers
-  ---
-  #title
-  Layered, and overridable
-
-  #description
-  Your `[env]` sits over the `UXD_*` block, a command's own `env` over that, and `--env K=V` wins on the command line.
+  Drop a placeholder for the port, the path or the branch into any command, environment value or hook, and uxd fills it in per workspace. [Template variables](/docs/configuration/environment-and-templates).
   :::
 
   :::u-page-feature
@@ -313,10 +280,10 @@ Paths, ports and your own variables are resolved before anything runs — and yo
   icon: i-lucide-eye
   ---
   #title
-  Read it before you run it
+  See it before you run it
 
   #description
-  `--dry-run` prints the resolved environment as `export` lines followed by the shell-quoted command. Nothing spawns.
+  A dry run prints the exact environment and the exact command, then stops. Useful on the day something behaves differently than you expected.
   :::
 ::
 
@@ -326,10 +293,10 @@ Section 5 — Lifecycle --------------------------------------------------------
 
 ::u-page-section{class="border-t border-default"}
 #title
-From open to [disposed]{.text-primary}
+From opened to [cleaned up]{.text-primary}
 
 #description
-A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
+A workspace has a lifespan. uxd covers all of it, and clears up after itself at the end.
 
 #features
   :::u-page-feature
@@ -338,10 +305,10 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   icon: i-lucide-terminal
   ---
   #title
-  One verb per intent
+  One word per intent
 
   #description
-  `code`, `run`, `shell`, `exec`, `diff`, `sync` — each materializes first, so there is no wrong order.
+  Open an editor, start a server, get a shell, read the diff. Each one sets the workspace up first, so there is no wrong order to do things in.
   :::
 
   :::u-page-feature
@@ -353,7 +320,7 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   See the whole board
 
   #description
-  `list` shows every workspace with its branch, port, age, PR state and CI mark.
+  One list of everything you have open — the branch, the port, how old it is, and whether its pull request is still alive.
   :::
 
   :::u-page-feature
@@ -362,10 +329,10 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   icon: i-lucide-refresh-cw
   ---
   #title
-  Refresh without rebuilding
+  Catch up without starting over
 
   #description
-  `sync` resets a workspace to its ref — `--stash` or `--discard` for local changes, `--fresh` to re-materialize from scratch.
+  Pull a workspace back up to date with its branch. If you have uncommitted work, uxd stops and tells you, rather than quietly throwing it away.
   :::
 
   :::u-page-feature
@@ -374,10 +341,10 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   icon: i-lucide-webhook
   ---
   #title
-  Your steps at every seam
+  Room for your own steps
 
   #description
-  `post_checkout`, `pre_run`, `post_sync`, `pre_clean` — start a container, drop a scratch database, or veto a removal. [Commands & hooks](/docs/configuration/commands-and-hooks).
+  Start a container before the dev server, drop a scratch database on the way out, or block a removal that is not safe yet. [Commands and hooks](/docs/configuration/commands-and-hooks).
   :::
 
   :::u-page-feature
@@ -386,10 +353,10 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   icon: i-lucide-trash-2
   ---
   #title
-  Reclaim the disk
+  Get the disk back
 
   #description
-  `clean --merged`, `--closed`, `--older-than 7d`. Prints a plan, asks first, skips dirty trees.
+  Clear out the workspaces whose pull requests have merged or closed. uxd shows you the list, asks before deleting, and skips anything with uncommitted work in it.
   :::
 
   :::u-page-feature
@@ -398,10 +365,10 @@ A workspace has a lifespan. uxd covers all of it, then cleans up after itself.
   icon: i-lucide-file-json
   ---
   #title
-  Made to be scripted
+  Fine inside your own scripts
 
   #description
-  `--json` on `checkout`, `list`, `info` and `projects`, with progress on stderr — so `cd "$(uxd my-project 42)"` just works. [Script with uxd](/docs/guides/script-with-uxd).
+  The commands that produce data can print JSON instead, with progress kept out of the way — so you can wrap uxd without parsing around it. [Script with uxd](/docs/guides/script-with-uxd).
   :::
 ::
 
@@ -426,7 +393,7 @@ No new runtime, no daemon, no account.
   Stock Node, plain git
 
   #description
-  Node ≥ 18 and git ≥ 2.38. Install it with npm, pnpm, or yarn — no Bun or Deno required.
+  Node 18 or newer and git 2.38 or newer. Install it with npm, pnpm or yarn — there is nothing else to add.
   :::
 
   :::u-page-feature
@@ -435,10 +402,10 @@ No new runtime, no daemon, no account.
   icon: i-lucide-circle-dashed
   ---
   #title
-  `gh` optional
+  GitHub's CLI, if you have it
 
   #description
-  With it you get PR state, CI marks, and true PR diffs. Without it, every feature degrades gracefully.
+  With it you get pull request status, CI results, and true pull request diffs. Without it, everything else still works.
   :::
 
   :::u-page-feature
@@ -447,10 +414,10 @@ No new runtime, no daemon, no account.
   icon: i-lucide-settings-2
   ---
   #title
-  One TOML per project
+  One small file per project
 
   #description
-  Commands, env, hooks, editor, ports — versioned as text, validated in aggregate by `config validate`.
+  Your commands, environment and hooks live in one readable text file, and uxd can check it for mistakes before you rely on it.
   :::
 ::
 
@@ -464,10 +431,10 @@ class: border-t border-default
 variant: subtle
 ---
 #title
-Materialize your first workspace
+Try it on the next pull request you review
 
 #description
-`uxd setup` creates the config dir, scaffolds your first project file, and prints the next command to run.
+One setup command writes your config, scaffolds your first project, and tells you exactly what to run next.
 
 #links
   :::u-button
