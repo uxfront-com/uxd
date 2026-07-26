@@ -1,7 +1,7 @@
 // `doctor` — diagnose the environment & configs (§9.11).
 
-import { accessSync, constants, existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { ExitCode } from "../lib/errors.ts";
 import { stateDir } from "../lib/paths.ts";
 import { checkGitVersion, fetchRefspecConfigured, hooksPathConfigured, isBareRepo, isInitialized, MIN_GIT_VERSION } from "../git/repo.ts";
@@ -35,6 +35,37 @@ function canWriteDir(dir: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * PATH lookup, except a binary given as a path is checked where it points. The
+ * `terminal` preset resolves to `$SHELL`, which is absolute — a PATH scan can
+ * never find it and would warn on every healthy machine.
+ */
+function resolveBinary(bin: string): string | null {
+  if (!bin.includes("/") && !bin.includes("\\")) return which(bin);
+  return existsSync(bin) ? bin : null;
+}
+
+/**
+ * Resolve symlinks in `dir` without requiring it to exist: realpath the nearest
+ * existing ancestor and re-append the remainder. A deleted worktree still
+ * normalizes to the path git would have printed for it.
+ */
+function canonical(dir: string): string {
+  let cur = dir;
+  const tail: string[] = [];
+  while (!existsSync(cur)) {
+    const parent = dirname(cur);
+    if (parent === cur) return dir;
+    tail.unshift(basename(cur));
+    cur = parent;
+  }
+  try {
+    return join(realpathSync(cur), ...tail);
+  } catch {
+    return dir;
   }
 }
 
@@ -153,14 +184,16 @@ async function checkProject(
     });
   }
 
-  // editor binary on PATH (presets only; custom templates are opaque)
+  // editor binary resolvable (presets only; custom templates are opaque)
   if (isPreset(project.editor)) {
     const bin = presetBinary(project.editor);
-    const found = bin ? which(bin) : null;
+    const found = bin ? resolveBinary(bin) : null;
     checks.push({
       name: `project ${name}: editor`,
       status: found ? "ok" : "warn",
-      detail: found ? `${project.editor} (${bin})` : `'${bin}' not on PATH — 'code' will fail until installed`,
+      detail: found
+        ? `${project.editor} (${found})`
+        : `${project.editor} → '${bin}' not found; opening a workspace will fail until installed`,
     });
   }
 
@@ -183,29 +216,42 @@ async function checkProject(
 }
 
 /**
- * Warn on drift between git's worktree list and uxd state (§9.11). The bare repo
- * itself is excluded, and adopted (`kind: path`) entries are ignored since they
- * live outside this repo. A parse failure here is silent — the state-file check
- * in checkProject reports it separately.
+ * Warn on drift between git's worktree list, the filesystem, and uxd state
+ * (§9.11). The bare repo itself is excluded, and adopted (`kind: path`) entries
+ * are ignored since they live outside this repo. A parse failure here is silent
+ * — the state-file check in checkProject reports it separately.
+ *
+ * The disk check is not redundant with the git diff: git does not auto-prune, so
+ * a hand-`rm -rf`'d worktree is still listed by `git worktree list` until
+ * `git worktree prune` runs. Without it that drift goes unreported.
+ *
+ * Both sides are canonicalized before comparison because git reports resolved
+ * paths; a configured `worktrees_path` crossing a symlink (`/tmp` on macOS)
+ * would otherwise mismatch every entry and warn permanently.
  */
 async function checkOrphans(name: string, repoPath: string, checks: Check[]): Promise<void> {
   let tracked: Set<string>;
   try {
     const st = loadState(name);
     tracked = new Set(
-      Object.values(st.workspaces).filter((w) => w.kind !== "path").map((w) => w.path),
+      Object.values(st.workspaces).filter((w) => w.kind !== "path").map((w) => canonical(w.path)),
     );
   } catch {
     return;
   }
-  const gitDirs = (await listWorktrees(repoPath)).filter((d) => d !== repoPath);
+  const repo = canonical(repoPath);
+  const gitDirs = (await listWorktrees(repoPath)).map(canonical).filter((d) => d !== repo);
   const gitSet = new Set(gitDirs);
   const untracked = gitDirs.filter((d) => !tracked.has(d));
-  const missing = [...tracked].filter((d) => !gitSet.has(d));
+  const missing = [...tracked].filter((d) => !gitSet.has(d) || !existsSync(d));
   if (untracked.length === 0 && missing.length === 0) return;
   const bits: string[] = [];
   if (untracked.length) bits.push(`${untracked.length} git worktree(s) not in state`);
-  if (missing.length) bits.push(`${missing.length} state entr${missing.length === 1 ? "y" : "ies"} with no git worktree`);
+  if (missing.length) {
+    bits.push(
+      `${missing.length} state entr${missing.length === 1 ? "y" : "ies"} with no live worktree (deleted on disk or unknown to git)`,
+    );
+  }
   checks.push({
     name: `project ${name}: worktrees`,
     status: "warn",
