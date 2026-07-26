@@ -155,8 +155,8 @@ importers:
         specifier: catalog:nuxt
         version: 2.0.19(vue@3.5.40(typescript@6.0.3))
       '@uxfront/layer-docs':
-        specifier: ^0.1.0
-        version: 0.1.0(28e0efc6fc045573a8ca1997ad65be9f)
+        specifier: ^0.1.1
+        version: 0.1.1(28e0efc6fc045573a8ca1997ad65be9f)
       '@vueuse/core':
         specifier: catalog:nuxt
         version: 14.3.0(vue@3.5.40(typescript@6.0.3))
@@ -2921,8 +2921,8 @@ packages:
     peerDependencies:
       vue: '>=3.5.18'
 
-  '@uxfront/layer-docs@0.1.0':
-    resolution: {integrity: sha512-UTWvToIFLPqmwmnAZoiXET2+om6EFHi9FpsIt20z5XLNZ1BlLMeO/hT0VyFGhN8hXJoG3rX3G/w/2B0zZlY0zQ==}
+  '@uxfront/layer-docs@0.1.1':
+    resolution: {integrity: sha512-qLdP0x1+C+/52sTR6ST6ullyyHOXNV91Os+kTrBB/IyjgtTyGnkBwHon22z9gSu+ol/McxLg/Ox5Hgeqjgn4WA==}
     peerDependencies:
       '@nuxt/content': ^3.14.0
       '@nuxt/image': ^1.11.0
@@ -9689,7 +9689,7 @@ snapshots:
       unhead: 2.1.16
       vue: 3.5.40(typescript@6.0.3)
 
-  '@uxfront/layer-docs@0.1.0(28e0efc6fc045573a8ca1997ad65be9f)':
+  '@uxfront/layer-docs@0.1.1(28e0efc6fc045573a8ca1997ad65be9f)':
     dependencies:
       '@nuxt/content': 3.14.0(better-sqlite3@12.11.1)(esbuild@0.28.1)(magicast@0.5.3)(rollup@4.62.2)(valibot@1.4.2(typescript@6.0.3))(vite@7.3.6(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.49.0)(yaml@2.9.0))
       '@nuxt/image': 1.11.0(db0@0.3.4(better-sqlite3@12.11.1))(ioredis@5.11.1)(magicast@0.5.3)(srvx@0.11.22)
