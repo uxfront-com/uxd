@@ -45,7 +45,7 @@ yarn global add @uxfront/uxd     # yarn (classic)
 Confirm the install:
 
 ```bash
-uxd version                      # → uxd 1.0.0
+uxd version                      # → uxd 1.1.0
 ```
 
 If `uxd` is not found, make sure your package manager's global bin directory is on your `PATH` — `$(npm prefix -g)/bin` (npm), `$(pnpm bin -g)` (pnpm), or `$(yarn global bin)` (yarn).
@@ -60,7 +60,7 @@ cd uxd
 npm install
 npm run build           # emits dist/bin/uxd.js (the linked bin points here)
 npm link                # puts `uxd` on your PATH
-uxd version             # → uxd 1.0.0
+uxd version             # → uxd 1.1.0
 ```
 
 `npm link` points `uxd` at your clone's `dist/`. Because the CLI runs compiled output, **re-run `npm run build` after a `git pull`** to pick up new changes.
@@ -78,7 +78,7 @@ Skip the global step and call the built entrypoint from the clone:
 
 ```bash
 npm install && npm run build
-node dist/bin/uxd.js version    # → uxd 1.0.0
+node dist/bin/uxd.js version    # → uxd 1.1.0
 ```
 
 The examples below use `uxd`; substitute `node dist/bin/uxd.js` if you have not linked it globally.
