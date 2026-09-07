@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { parse, type ParseDeps } from "../../src/cli/parse.ts";
+import { TOP_LEVEL_VERBS } from "../../src/cli/verbs.ts";
 import { parseUrlInput } from "../../src/core/resolve.ts";
 
 const deps: ParseDeps = {
@@ -175,6 +177,43 @@ describe("parse — global flags & disambiguators", () => {
   it("--pr forces PR interpretation", () => {
     const r = p(["n8n", "--pr", "42", "shell"]);
     expect(r.kind === "workspace" && r.ref).toEqual({ kind: "pr", number: 42 });
+  });
+});
+
+describe("parse — top-level verbs precede project lookup (UXF-265)", () => {
+  // Spelled out on purpose. Iterating TOP_LEVEL_VERBS would make this a
+  // tautology: dropping a verb from the table would delete its own test, which
+  // is exactly how `setup` shipped unreachable.
+  const PROMISED_VERBS = [
+    "setup",
+    "projects",
+    "doctor",
+    "config",
+    "completions",
+    "help",
+    "version",
+  ];
+
+  it.each(PROMISED_VERBS)("'%s' parses as a top-level verb, not a project name", (verb) => {
+    const r = p([verb]);
+    expect(r.kind).toBe("top");
+    expect(r.kind === "top" && r.verb).toBe(verb);
+  });
+
+  it("main() dispatches every promised verb", () => {
+    // A verb in the table but absent from the dispatch switch falls off the end
+    // of main(). Keeps the two lists in step.
+    const dispatchSource = readFileSync(new URL("../../src/main.ts", import.meta.url), "utf8");
+    for (const verb of PROMISED_VERBS) {
+      if (verb === "help" || verb === "version") continue; // handled inline, no command module
+      expect(dispatchSource).toContain(`case "${verb}":`);
+    }
+  });
+
+  it("the verb table carries no verb the promised list omits", () => {
+    // The reverse direction: a new verb must be added to PROMISED_VERBS above,
+    // which forces the parse + packaging coverage to grow with it.
+    expect([...TOP_LEVEL_VERBS].sort()).toEqual([...PROMISED_VERBS].sort());
   });
 });
 
