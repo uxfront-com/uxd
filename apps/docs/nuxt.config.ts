@@ -1,4 +1,3 @@
-import { useNuxt } from "@nuxt/kit";
 import {
 	DOCS_GROUP_ENTRY_PATHS,
 	DOCS_SECTION_ENTRY_PATHS,
@@ -18,10 +17,9 @@ export default defineNuxtConfig({
 		dirs: ["constants"],
 	},
 
-	// Single Tailwind entry. This app's `main.css` re-imports the layer's base so
-	// the consumer's `@source` scan compiles in the same pass; the `modules:done`
-	// hook below then drops the layer's own standalone `main.css` registration to
-	// avoid a second Tailwind pass that would clobber responsive variants.
+	// The single Tailwind entry. This app's `main.css` imports the layer's base so
+	// the consumer's `@source` scan compiles in the same pass. Since 0.3.0 the
+	// layer registers no CSS entry of its own, so this is the only one.
 	css: ["./app/assets/css/main.css"],
 
 	content: {
@@ -102,16 +100,6 @@ export default defineNuxtConfig({
 			// page too so the whole `/docs` tree is reachable by the crawler even if
 			// the homepage CTA ever stops pointing at it.
 			routes: Object.values(DOCS_SECTION_ENTRY_PATHS),
-		},
-	},
-
-	hooks: {
-		"modules:done": () => {
-			const nuxt = useNuxt();
-			nuxt.options.css = nuxt.options.css.filter(
-				(entry) =>
-					typeof entry !== "string" || !entry.includes("@uxfront/layer-docs"),
-			);
 		},
 	},
 });

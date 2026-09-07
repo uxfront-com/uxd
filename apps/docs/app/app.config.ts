@@ -45,6 +45,21 @@ export default defineAppConfig({
 		],
 	},
 	socials: {} as Record<string, string>,
+	/*
+	 * OG card accent, as a literal. Satori has no CSS cascade, so the layer
+	 * resolves the accent at build time by following `--ui-primary` in this app's
+	 * CSS entry to the `--color-*` literal it aliases. uxd's primary is a STOCK
+	 * Tailwind scale reached through Nuxt UI (`--ui-primary:
+	 * var(--ui-color-primary-700)`), not a brand `@theme` literal, so that walk
+	 * dead-ends and the layer falls back to white — an unbranded card.
+	 *
+	 * green-400 rather than the light-mode green-700: the card is `bg-neutral-900`
+	 * (#171717), where green-400 measures 10.08:1 against green-700's 3.63:1.
+	 * Keep in step with the `.dark` `--ui-primary` mapping in `main.css`.
+	 */
+	ogImage: {
+		accent: "#05df72",
+	},
 	github: {
 		url: "https://github.com/uxfront-com/uxd",
 		branch: "main",
