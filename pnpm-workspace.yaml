@@ -2,7 +2,15 @@ packages:
   - apps/*
 
 allowBuilds:
+  '@parcel/watcher': true
+  '@tailwindcss/oxide': true
+  '@uxfront/layer-docs': true
+  better-sqlite3: true
+  core-js: true
   esbuild: true
+  sharp: true
+  unrs-resolver: true
+  vue-demi: true
 
 catalog:
   defu: 6.1.7
