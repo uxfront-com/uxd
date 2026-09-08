@@ -1,0 +1,73 @@
+# The npm trusted publisher for @uxfront/uxd names this file by its exact
+# filename. Renaming or moving changesets.yml revokes the publish credential,
+# and the release then fails with a misleading E404.
+name: Changesets
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Never cancel a release mid-flight.
+concurrency:
+  group: changesets-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: 22
+
+permissions: {}
+
+jobs:
+  release:
+    name: Version or publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # version commit, git tags, GitHub releases
+      pull-requests: write # the "Version Packages" PR
+      id-token: write # npm trusted publishing (OIDC)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # v6+ is required: older releases broke OIDC publishing under pnpm 11
+      # with an E404 that reads like a missing package (pnpm#11513, pnpm#11566).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+
+      # No NODE_AUTH_TOKEN, on purpose. Trusted publishing mints a short-lived
+      # credential from the OIDC token above; there is no npm token to leak.
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # Includes test/integration/packaging.test.ts, which asserts that every
+      # promised verb survives the build. `pnpm release` runs it again as the
+      # last thing before `changeset publish`.
+      - name: Test
+        run: pnpm test
+
+      # With any pending changeset: opens/updates the "Version Packages" PR and
+      # publishes nothing. With none: publishes @uxfront/uxd if its version is
+      # absent from the registry, then pushes the git tag and creates the
+      # GitHub release.
+      - name: Version or publish
+        uses: changesets/action@v1
+        with:
+          version: pnpm version-packages
+          publish: pnpm release
+          commit: "chore(release): version packages"
+          title: "chore(release): version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,6 +13,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Every change to the published package needs a changeset, so nothing reaches
+  # npm without a version bump and a changelog line. `pnpm changeset --empty`
+  # covers a change that ships but has no consumer-visible effect.
+  changeset:
+    name: Changeset present
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.head_ref != 'changeset-release/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require a changeset for changes to the published package
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --no-tags origin "+refs/heads/${BASE_REF}:refs/remotes/origin/${BASE_REF}"
+          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          # The `files` field of package.json, plus the sources that produce it.
+          if ! printf '%s\n' "$changed" | grep -qE '^(src/|bin/|package\.json$|tsconfig\.build\.json$|README\.md$|DESIGN\.md$)'; then
+            echo "No change to the published package. No changeset needed."
+            exit 0
+          fi
+          if printf '%s\n' "$changed" | grep -qE '^\.changeset/.+\.md$'; then
+            echo "Changeset present."
+            exit 0
+          fi
+          echo "::error::This PR changes the published package but adds no changeset. Run 'pnpm changeset', or 'pnpm changeset --empty' if nothing consumer-visible changed."
+          exit 1
+
   test:
     name: node ${{ matrix.node }}
     runs-on: ubuntu-latest

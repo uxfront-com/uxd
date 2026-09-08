@@ -1,4 +1,8 @@
 packages:
+  # `@uxfront/uxd` is the published package and it sits at the workspace root.
+  # Without this entry Changesets cannot see it and rejects every changeset with
+  # "package @uxfront/uxd which is not in the workspace".
+  - '.'
   - apps/*
 
 allowBuilds:
