@@ -38,7 +38,7 @@ this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ```
 
   Config layering may return in a later release. Follow
-  [the project file reference](https://docs.uxfront.com/docs/uxd/configuration/project-file)
+  [the project file reference](https://github.com/uxfront-com/uxd/blob/main/apps/docs/content/docs/configuration/02.project-file.md)
   for the keys that are supported today.
 
 ### Added
@@ -68,8 +68,8 @@ this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   `--dry-run` prints the planned writes and changes nothing. An existing project
   file is refused with `E_CONFIG` unless you pass `--force`. See
-  [`setup`](https://docs.uxfront.com/docs/uxd/cli/top-level-verbs) for the full
-  prompt and flag reference.
+  [the top-level verb reference](https://github.com/uxfront-com/uxd/blob/main/apps/docs/content/docs/cli/04.top-level-verbs.md)
+  for the full prompt and flag reference.
 
 - **`uxd config add` seeds a starter template.** Opening a project file that does
   not exist used to drop you into an empty buffer, so you had to know the TOML
@@ -78,9 +78,6 @@ this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   are never touched, and `--dry-run` prints the template plus the editor command
   without creating anything. Reserved or malformed project names now exit with a
   usage error and write nothing, which `edit` previously skipped.
-
-- **A documentation site at [docs.uxfront.com](https://docs.uxfront.com/docs/uxd).**
-  Getting started, task guides, full CLI reference, and configuration reference.
 
 ### Fixed
 
