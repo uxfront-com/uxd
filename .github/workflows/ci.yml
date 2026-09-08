@@ -40,3 +40,84 @@ jobs:
 
       - name: Test
         run: npm test
+
+  # `apps/docs` is a pnpm workspace package that the `test` job above never
+  # touches — it runs `npm ci` and the root scripts only. A consumer upgrade of
+  # `@uxfront/layer-docs` could break the CSS entry point or add mandatory peer
+  # dependencies and still collect a full set of green ticks (UXF-281).
+  #
+  # The job ALWAYS runs and filters inside itself, rather than filtering the
+  # workflow with `on.pull_request.paths`. A workflow skipped by a path filter
+  # never reports its checks, so as a required check it would leave every
+  # unrelated pull request pending forever. Here the check always reports, and
+  # pull requests that do not touch the docs pay only the checkout.
+  docs:
+    name: docs build
+    runs-on: ubuntu-latest
+    # Pull requests only. The change filter below needs a base branch to diff
+    # against, which a push event does not carry.
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the change filter below needs the merge base.
+          fetch-depth: 0
+
+      - name: Detect changes affecting apps/docs
+        id: filter
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          echo "$changed"
+          # pnpm-workspace.yaml carries the version catalog, so a dependency bump
+          # can change what apps/docs builds without touching apps/docs itself.
+          # ci.yml is listed so changes to this gate test themselves.
+          if printf '%s\n' "$changed" | grep -qE '^(apps/docs/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No apps/docs changes — skipping the docs build."
+          fi
+
+      - name: Set up pnpm
+        if: steps.filter.outputs.changed == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          # The root package.json carries no `packageManager` field, because the
+          # root CLI package installs with npm. So pin the version here instead.
+          version: 10.33.4
+
+      # Node 22 matches the runtime the docs image ships on (apps/docs/Dockerfile).
+      - name: Set up Node
+        if: steps.filter.outputs.changed == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+
+      # `--frozen-lockfile` is half the gate: it fails when a dependency bump in
+      # apps/docs/package.json never made it into pnpm-lock.yaml.
+      - name: Install dependencies
+        if: steps.filter.outputs.changed == 'true'
+        run: pnpm install --frozen-lockfile --filter @uxfront/docs
+
+      - name: Test
+        if: steps.filter.outputs.changed == 'true'
+        run: pnpm --filter @uxfront/docs run test
+
+      # NODE_OPTIONS mirrors apps/docs/Dockerfile: the prerenderer needs more
+      # heap than node's default.
+      - name: Build
+        if: steps.filter.outputs.changed == 'true'
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NUXT_TELEMETRY_DISABLED: '1'
+        run: pnpm --filter @uxfront/docs run build
+
+      # `nuxt typecheck` is deliberately NOT in this gate. On 5925b6e it reports
+      # 3 errors, all 3 inside node_modules/@uxfront/layer-docs and none in
+      # apps/docs — so it is red today and cannot be fixed from this repository.
+      # A check that is red on arrival teaches reviewers to ignore red, which is
+      # the failure this gate exists to remove. Add it here once
+      # `pnpm --filter @uxfront/docs run typecheck` exits 0 on main.
