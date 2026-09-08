@@ -16,8 +16,13 @@
     "dev": "npm run build && node dist/bin/uxd.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "guard:packaging": "vitest run test/integration/packaging.test.ts",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "pnpm run guard:packaging && changeset publish",
     "prepublishOnly": "npm run build"
   },
+  "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": ">=18"
   },
@@ -28,6 +33,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.1",
     "@types/node": "^20.11.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
