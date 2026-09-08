@@ -543,3 +543,5 @@ node dist/bin/uxd.js help      # run the built CLI
 ```
 
 `DESIGN.md` is the source of truth for behavior and scope. See `docs/adrs/` for architecture decision records.
+
+Releases are published to npm by `.github/workflows/release.yml` when a `v*` tag is pushed. `docs/release-runbook.md` covers how to cut a release and how to roll one back.
