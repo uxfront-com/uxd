@@ -543,3 +543,5 @@ node dist/bin/uxd.js help      # run the built CLI
 ```
 
 `DESIGN.md` is the source of truth for behavior and scope. See `docs/adrs/` for architecture decision records.
+
+Every change that reaches the published package needs a changeset — run `pnpm changeset` and commit the generated file with your PR. Releases are published to npm by `.github/workflows/changesets.yml`. See `.changeset/README.md` for the author workflow and `docs/release-runbook.md` for how a release runs and how to roll one back.
