@@ -115,13 +115,13 @@ jobs:
             echo "No apps/docs changes — skipping the docs build."
           fi
 
-      # No `version` input: the root package.json now carries `packageManager`,
-      # which pins pnpm for this job and for the release workflow from one place.
-      # Setting both makes pnpm/action-setup fail with "Multiple versions of pnpm
-      # specified".
       - name: Set up pnpm
         if: steps.filter.outputs.changed == 'true'
         uses: pnpm/action-setup@v4
+        with:
+          # The root package.json carries no `packageManager` field, because the
+          # root CLI package installs with npm. So pin the version here instead.
+          version: 10.33.4
 
       # Node 22 matches the runtime the docs image ships on (apps/docs/Dockerfile).
       - name: Set up Node

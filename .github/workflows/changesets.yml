@@ -35,8 +35,13 @@ jobs:
 
       # v6+ is required: older releases broke OIDC publishing under pnpm 11
       # with an E404 that reads like a missing package (pnpm#11513, pnpm#11566).
+      #
+      # Pinned here rather than through `packageManager` in package.json, so this
+      # workflow cannot change which pnpm the `docs build` job in ci.yml runs.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
+        with:
+          version: 11.13.1
 
       # No NODE_AUTH_TOKEN, on purpose. Trusted publishing mints a short-lived
       # credential from the OIDC token above; there is no npm token to leak.

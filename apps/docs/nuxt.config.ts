@@ -100,6 +100,12 @@ export default defineNuxtConfig({
 			// page too so the whole `/docs` tree is reachable by the crawler even if
 			// the homepage CTA ever stops pointing at it.
 			routes: Object.values(DOCS_SECTION_ENTRY_PATHS),
+
+			// Without this a prerendered route that 404s only prints an ERROR line —
+			// `nuxt build` still exits 0. A dead redirect target or a renamed content
+			// file would ship green. The CI docs gate reads the exit code, so the
+			// gate can only go red on a broken page if the build fails on one.
+			failOnError: true,
 		},
 	},
 });

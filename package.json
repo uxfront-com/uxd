@@ -22,7 +22,6 @@
     "release": "pnpm run guard:packaging && changeset publish",
     "prepublishOnly": "npm run build"
   },
-  "packageManager": "pnpm@11.13.1",
   "engines": {
     "node": ">=18"
   },
