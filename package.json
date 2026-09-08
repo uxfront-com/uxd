@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "CHANGELOG.md",
     "DESIGN.md",
     "README.md"
   ],
