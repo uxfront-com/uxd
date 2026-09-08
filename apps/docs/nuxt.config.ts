@@ -58,6 +58,22 @@ export default defineNuxtConfig({
 		},
 	},
 
+	// The layer resolves the OG card accent inside its `config` module, at build
+	// time, so it sees only the `appConfig` declared HERE — `app/app.config.ts`
+	// is evaluated later. Its own fallback walks `--ui-primary` through this
+	// app's CSS to a literal, but uxd's primary is a stock Tailwind scale reached
+	// through Nuxt UI (`--ui-primary: var(--ui-color-primary-700)`), not a brand
+	// `@theme` literal, so the walk dead-ends. 0.4.1 warns and falls back to
+	// white; 0.5.0 fails the build. This declaration is the escape.
+	//
+	// The `app.config.ts` copy stays — it is what the card renders from. Keep the
+	// two values, and the `.dark` `--ui-primary` mapping in `main.css`, in step.
+	appConfig: {
+		ogImage: {
+			accent: "#05df72",
+		},
+	},
+
 	site: {
 		url: "https://docs.uxfront.com",
 		name: "uxfront — Documentation",
