@@ -50,6 +50,8 @@ uxd version                      # → uxd 1.1.0
 
 If `uxd` is not found, make sure your package manager's global bin directory is on your `PATH` — `$(npm prefix -g)/bin` (npm), `$(pnpm bin -g)` (pnpm), or `$(yarn global bin)` (yarn).
 
+Upgrading? [`CHANGELOG.md`](CHANGELOG.md) lists what changed in each release. Note that 1.0.0 has no `uxd setup` command and reports its version as `uxd 0.0.0`, and that 1.1.0 removed the `extends` project key.
+
 ### Install from a clone (local development)
 
 Working on `uxd` itself? `uxd` ships as compiled JavaScript, so a clone install has two steps — install dependencies, then build the `dist/` output the CLI runs from — before you link it onto your `PATH`:
