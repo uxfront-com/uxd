@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.1
+
+### Patch Changes
+
+- d956cec: Publish releases with Changesets behind the packaging gate. No CLI behavior
+  changes; the release itself is the proof that the pipeline works end to end.
+
 All notable changes to [`@uxfront/uxd`](https://www.npmjs.com/package/@uxfront/uxd)
 are documented in this file.
 
@@ -111,8 +118,7 @@ this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 First published release on npm as `@uxfront/uxd`.
 
-> [!WARNING]
-> **1.0.0 has no `uxd setup` command.** The verb did not exist yet, so the CLI
+> [!WARNING] > **1.0.0 has no `uxd setup` command.** The verb did not exist yet, so the CLI
 > reads `setup` as a project name and fails:
 >
 > ```
