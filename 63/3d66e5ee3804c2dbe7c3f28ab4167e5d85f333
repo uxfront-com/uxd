@@ -1,0 +1,26 @@
+src/core/setup.ts
+  s_f4f969cbdc617b::t_fe6118cb143183 98-99
+  s_f4f969cbdc617b::t_3680a402eb5413 110
+  s_f4f969cbdc617b::t_ab711bb720dfb1 108-109,111-112
+test/unit/setup.test.ts
+  s_f4f969cbdc617b::t_b1d91a7d1ee714 43-52
+.changeset/brisk-globs-prune.md
+  s_f4f969cbdc617b::t_abb64de67d8b95 8
+  s_f4f969cbdc617b::t_01273c66fe068d 1-7,9-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "633d66e5ee3804c2dbe7c3f28ab4167e5d85f333",
+  "prompts": {},
+  "sessions": {
+    "s_f4f969cbdc617b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e19882d5-7044-454f-bb25-7cff0abf5f67",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Alex Grozav <alex@grozav.com>"
+    }
+  }
+}
