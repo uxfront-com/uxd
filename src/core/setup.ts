@@ -95,6 +95,8 @@ function assertSafeRelative(rel: string): void {
 
 // ── Cache-key hashing (§8.4.2) ──────────────────────────────────────────────
 
+const HASH_EXCLUDES = ["**/node_modules/**", "**/.git/**"];
+
 /**
  * sha256 over the sorted `cache_key` glob matches, hashing each relative path and
  * its bytes. Anything under `node_modules/` or `.git/` is excluded. An empty glob
@@ -103,12 +105,11 @@ function assertSafeRelative(rel: string): void {
 export async function computeSetupHash(worktree: string, globs: string[]): Promise<string> {
   const matched = new Set<string>();
   for (const pattern of globs) {
-    const entries = await glob(pattern, { cwd: worktree, dot: true, onlyFiles: true });
-    for (const rel of entries) {
-      const segments = rel.split("/");
-      if (segments.includes("node_modules") || segments.includes(".git")) continue;
-      matched.add(rel);
-    }
+    // Prune excluded trees during the walk, not after it: filtering the results
+    // still lets a `**` pattern descend every installed `node_modules/`, which in
+    // a large monorepo can take a minute or more.
+    const entries = await glob(pattern, { cwd: worktree, dot: true, onlyFiles: true, ignore: HASH_EXCLUDES });
+    for (const rel of entries) matched.add(rel);
   }
 
   const hash = createHash("sha256");

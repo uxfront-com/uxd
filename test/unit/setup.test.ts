@@ -40,6 +40,16 @@ describe("computeSetupHash — §8.4.2", () => {
     expect(after).toBe(base);
   });
 
+  it("excludes node_modules nested inside workspace packages", async () => {
+    mkdirSync(join(tree, "packages", "a"), { recursive: true });
+    writeFileSync(join(tree, "packages", "a", "package.json"), '{"name":"a"}\n');
+    const base = await computeSetupHash(tree, ["**/package.json"]);
+    mkdirSync(join(tree, "packages", "a", "node_modules", "dep"), { recursive: true });
+    writeFileSync(join(tree, "packages", "a", "node_modules", "dep", "package.json"), '{"name":"dep"}\n');
+    const after = await computeSetupHash(tree, ["**/package.json"]);
+    expect(after).toBe(base);
+  });
+
   it("yields a stable hash for an empty glob set", async () => {
     const a = await computeSetupHash(tree, []);
     const b = await computeSetupHash(tree, []);
