@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.1
+
+### Patch Changes
+
+- fd1e014: Skip `node_modules/` and `.git/` while expanding `setup.cache_key` globs, not
+  after. A `**` pattern such as `**/package.json` used to walk every installed
+  dependency before the matches were filtered, so once a workspace had been set
+  up, each later `run` could spend a minute or more hashing in a large monorepo
+  before it started anything. The set of hashed files is unchanged, so existing
+  workspaces do not re-run setup.
+- d956cec: Publish releases with Changesets behind the packaging gate. No CLI behavior
+  changes; the release itself is the proof that the pipeline works end to end.
+
 All notable changes to [`@uxfront/uxd`](https://www.npmjs.com/package/@uxfront/uxd)
 are documented in this file.
 
@@ -111,8 +124,7 @@ this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 First published release on npm as `@uxfront/uxd`.
 
-> [!WARNING]
-> **1.0.0 has no `uxd setup` command.** The verb did not exist yet, so the CLI
+> [!WARNING] > **1.0.0 has no `uxd setup` command.** The verb did not exist yet, so the CLI
 > reads `setup` as a project name and fails:
 >
 > ```
