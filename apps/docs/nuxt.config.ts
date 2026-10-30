@@ -75,7 +75,7 @@ export default defineNuxtConfig({
 	},
 
 	site: {
-		url: "https://uxfront.com",
+		url: "https://uxd.uxfront.com",
 		name: "uxfront — Documentation",
 	},
 
