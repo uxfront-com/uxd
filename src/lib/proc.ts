@@ -72,6 +72,36 @@ export async function capture(argv: string[], opts: CaptureOptions = {}): Promis
   });
 }
 
+/**
+ * `capture` with stdout kept as raw bytes, for content whose exact bytes matter
+ * (a repo file's sha256, §5.7). Never throws on a non-zero exit.
+ */
+export async function captureBytes(
+  argv: string[],
+  opts: { cwd?: string; env?: Record<string, string> } = {},
+): Promise<{ code: number; stdout: Buffer; stderr: string }> {
+  recorder?.(argv);
+  return await new Promise((resolve, reject) => {
+    const child = spawn(argv[0]!, argv.slice(1), {
+      cwd: opts.cwd,
+      env: opts.env ?? (process.env as Record<string, string>),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const out: Buffer[] = [];
+    let stderr = "";
+    child.stdout!.on("data", (chunk: Buffer) => out.push(chunk));
+    child.stderr!.setEncoding("utf8");
+    child.stderr!.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+    child.on("error", (e) => reject(mapSpawnError(e, argv)));
+    child.on("close", (code, signal) => {
+      const exit = code ?? (signal ? 128 + signalNumber(signal) : 1);
+      resolve({ code: exit, stdout: Buffer.concat(out), stderr });
+    });
+  });
+}
+
 export interface PassthroughOptions {
   cwd?: string;
   env?: Record<string, string>;

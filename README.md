@@ -70,6 +70,8 @@ Here's the smallest session that works, from a fresh install to a running worksp
 testlane setup --name my-project --repo git@github.com:my-org/my-project.git --yes
 ```
 
+When the repository ships a `.testlane.toml`, you can skip writing the project file: `testlane config add https://github.com/my-org/my-project` writes it, clones the repository and asks you to trust the repository's setup and commands. [Repository config](#repository-config) says more.
+
 `setup` writes only the repository, so open the file with `testlane config edit my-project` and tell Testlane how to install dependencies and what your commands are:
 
 ```toml
@@ -205,13 +207,13 @@ These take no project:
 | `setup`       | Creates the config directory and writes your first project file                      |
 | `projects`    | Lists the projects you've set up                                                     |
 | `doctor`      | Checks git, `gh`, the config and state directories and every project                 |
-| `config`      | Prints the config directory (`path`), or edits, adds or validates a project file     |
+| `config`      | Prints the config directory (`path`), edits, adds, validates or shows a project's config, and trusts a repository's `.testlane.toml` |
 | `completions` | Prints a completion script for `bash`, `zsh` or `fish`                               |
 | `mcp`         | Serves Testlane's tools to an MCP client over stdio                                  |
 | `help`        | Prints the usage                                                                     |
 | `version`     | Prints the version                                                                   |
 
-`config` takes `path`, `edit [project]`, `add [project]` or `validate [project]`, and `add` and `edit` both write a starter file when the project has none. To turn on completions in bash or fish, add the line for your shell to its startup file:
+`config` takes `path`, `edit [project]`, `add [project]`, `add <url>`, `validate [project]`, `show <project>` or `trust <project>`. `add` and `edit` both write a starter file when the project has none, while `add <url>` names the project after the repository, clones it and asks you to trust its `.testlane.toml`. `show` prints the config a run would use, with where each key came from, and `trust` shows the repository's file and records your approval. To turn on completions in bash or fish, add the line for your shell to its startup file:
 
 ```bash
 eval "$(testlane completions bash)"   # ~/.bashrc
@@ -266,7 +268,7 @@ Testlane reads one TOML file per project from its config directory. It looks for
       .env.local
 ```
 
-A project name matches `^[a-z0-9][a-z0-9._-]*$`, and `defaults` and `seeds` are taken. `defaults.toml` holds `root`, the base directory for every project's clone and workspaces, with `editor` and `default_command` as fallbacks. It takes no `env` or `commands`, so each project file says everything about its project.
+A project name matches `^[a-z0-9][a-z0-9._-]*$`, and `defaults` and `seeds` are taken. `defaults.toml` holds `root`, the base directory for every project's clone and workspaces, with `editor` and `default_command` as fallbacks. It takes no `env` or `commands`, since those belong to one project: in its project file, or in its repository's `.testlane.toml`.
 
 A project file needs only `repo`. These are the keys it takes:
 
@@ -284,6 +286,14 @@ A project file needs only `repo`. These are the keys it takes:
 | `[hooks]`                          | Commands to run at `post_checkout`, `pre_run`, `post_sync` and `pre_clean`                     |
 
 `config validate` checks every file and reports all the problems in a file at once, so you can fix them in one go.
+
+### Repository config
+
+A repository can commit a `.testlane.toml` at its root, so its maintainers write the setup, env and commands once and everyone who adds the project gets them. It takes `ports`, `default_command`, `setup.run`, `setup.cache_key`, `setup.seed_files`, `[env]`, `[commands]` and `[hooks]`. The keys about your machine, like `repo_path` or `editor`, stay in your project file, and Testlane rejects them in the repository's file.
+
+Testlane reads the file only from the tip of the default branch, never from the branch or pull request you check out, so a pull request, even one from a fork, can't change what runs on your machine. It runs the file's commands only after you approve that exact content: the first time, it prints what the file would run and the whole file, and after a change, the diff. With no terminal to ask on, a command stops with exit `3` and the hint `testlane config trust my-project`, and `--yes` approves without asking. Until you approve, your project file works on its own.
+
+Your project file wins wherever both set a key. `[env]` merges by key, `[commands]` by name and `[hooks]` by hook name, and a command of yours replaces the repository's command of that name whole. `testlane config show my-project` prints the merged config with where each key came from, and a repository with no `.testlane.toml` works exactly as before. [Ship a config with your repo](https://testlane.dev/docs/guides/ship-a-config-with-your-repo) walks through it from both sides.
 
 ### Template variables
 
@@ -355,7 +365,7 @@ Every error prints one line on stderr, like `error(E_CONFIG): unknown project 'n
 | `0`  |              | Success                                                                        |
 | `1`  | `E_INTERNAL` | Something went wrong inside Testlane                                           |
 | `2`  | `E_USAGE`    | A flag or an argument is wrong                                                 |
-| `3`  | `E_CONFIG`   | The config is invalid, or the project doesn't exist                            |
+| `3`  | `E_CONFIG`   | The config is invalid, the project doesn't exist, or a repository's `.testlane.toml` needs your approval |
 | `4`  | `E_RESOLVE`  | The ref couldn't be resolved                                                   |
 | `5`  | `E_GIT`      | A git or `gh` command failed. Some of these print as `E_EXTERNAL`              |
 | `6`  | `E_SETUP`    | `[setup]`, a hook that can block or `start` failed                             |

@@ -1,8 +1,9 @@
 // Primary repo init, fetch strategies, default-branch detection (§7.1–7.3).
 
 import { existsSync } from "node:fs";
-import { capture } from "../lib/proc.ts";
-import { TestlaneError } from "../lib/errors.ts";
+import { capture, captureBytes } from "../lib/proc.ts";
+import { TestlaneError, resolveError } from "../lib/errors.ts";
+import { isValidBranchName } from "../core/resolve.ts";
 import type { Logger } from "../lib/log.ts";
 
 export const MIN_GIT_VERSION = "2.38";
@@ -55,6 +56,27 @@ export function initFetchArgv(repoPath: string): string[] {
   return ["git", "-C", repoPath, "fetch", "origin", "--no-tags"];
 }
 
+/**
+ * Fetch one branch into its own remote-tracking ref, and nothing else (§7.2).
+ * The name is checked and the refspec spelled out, so a name like
+ * `+refs/pull/7/head:refs/remotes/origin/main` can never move another ref.
+ */
+export function fetchBranchArgv(repoPath: string, name: string): string[] {
+  if (!isValidBranchName(name)) {
+    throw resolveError(`'${name}' is not a valid branch name`, "git refuses it as a branch name, or would read it as a refspec");
+  }
+  return [
+    "git",
+    "-C",
+    repoPath,
+    "fetch",
+    "--no-tags",
+    "origin",
+    "--end-of-options",
+    `+refs/heads/${name}:refs/remotes/origin/${name}`,
+  ];
+}
+
 // ── Operations ───────────────────────────────────────────────────────────────
 
 export function isInitialized(repoPath: string): boolean {
@@ -84,12 +106,44 @@ export async function detectDefaultBranch(g: GitEnv): Promise<string | undefined
 
 /** Fetch a branch's remote-tracking ref (§7.2). */
 export async function fetchBranch(g: GitEnv, name: string): Promise<void> {
+  const argv = fetchBranchArgv(g.repoPath, name);
+  await refuseCaseCollision(g, name);
   g.log.step(`fetching origin/${name}`);
-  // `--end-of-options` keeps a name like `--upload-pack=<cmd>` from reaching git as an option.
-  const res = await runGit(g, ["git", "-C", g.repoPath, "fetch", "--no-tags", "origin", "--end-of-options", name], {
+  const res = await runGit(g, argv, { allowFailure: true });
+  if (res.code !== 0) throw classifyFetchError(res.stderr, `branch '${name}'`);
+}
+
+/** How a case- and normalization-insensitive filesystem (APFS, NTFS) compares names. */
+function foldName(name: string): string {
+  return name.normalize("NFD").toLowerCase();
+}
+
+/**
+ * On a filesystem that ignores case (git sets `core.ignorecase` when it creates
+ * the repo), `refs/remotes/origin/Main` is the same file as `.../main`, so a
+ * forced fetch of `Main` would move `origin/main`. Refuse a name that differs
+ * from an existing remote-tracking ref only in case or Unicode normalization.
+ */
+async function refuseCaseCollision(g: GitEnv, name: string): Promise<void> {
+  if (g.dryRun || !isInitialized(g.repoPath)) return;
+  const ignoreCase = await runGit(g, ["git", "-C", g.repoPath, "config", "--bool", "core.ignorecase"], {
+    read: true,
     allowFailure: true,
   });
-  if (res.code !== 0) throw classifyFetchError(res.stderr, `branch '${name}'`);
+  if (ignoreCase.stdout.trim() !== "true") return;
+  const prefix = "refs/remotes/origin/";
+  const refs = await runGit(g, ["git", "-C", g.repoPath, "for-each-ref", "--format=%(refname)", prefix], { read: true });
+  const want = foldName(name);
+  const clash = refs.stdout
+    .split("\n")
+    .map((ref) => ref.slice(prefix.length))
+    .find((other) => other !== "" && other !== name && foldName(other) === want);
+  if (clash !== undefined) {
+    throw resolveError(
+      `branch '${name}' differs only in case from origin/${clash}`,
+      "this filesystem ignores case in ref names, so fetching it would overwrite that ref",
+    );
+  }
 }
 
 /** Force-fetch a PR head into a local `pr/<n>` branch (§7.2). */
@@ -280,4 +334,71 @@ export async function hooksPathConfigured(repoPath: string): Promise<string | nu
   });
   const val = res.stdout.trim();
   return res.code === 0 && val !== "" ? val : null;
+}
+
+// ── Repo config reads (§5.7) ─────────────────────────────────────────────────
+
+/**
+ * The bare clone's HEAD branch, e.g. `main`. A bare clone's HEAD is origin's
+ * default branch at clone time, so this needs no network.
+ */
+export async function symbolicHead(repoPath: string): Promise<string | undefined> {
+  const res = await capture(["git", "-C", repoPath, "symbolic-ref", "--short", "HEAD"], {
+    allowFailure: true,
+    env: env(),
+  });
+  const name = res.stdout.trim();
+  return res.code === 0 && name !== "" ? name : undefined;
+}
+
+/** True when `ref` resolves to a commit in the local repo. */
+export async function refExists(repoPath: string, ref: string): Promise<boolean> {
+  const res = await capture(["git", "-C", repoPath, "rev-parse", "--verify", "--quiet", `${ref}^{commit}`], {
+    allowFailure: true,
+    env: env(),
+  });
+  return res.code === 0;
+}
+
+export interface TreeEntry {
+  mode: string;
+  type: string;
+  id: string;
+}
+
+/**
+ * The tree entry for `path` at the root of `ref`, or null when absent. Reads
+ * only tree objects, which a `blob:none` partial clone always has locally.
+ */
+export async function treeEntry(repoPath: string, ref: string, path: string): Promise<TreeEntry | null> {
+  const res = await capture(["git", "-C", repoPath, "ls-tree", "-z", ref, "--", path], {
+    allowFailure: true,
+    env: env(),
+    errCode: "E_GIT",
+  });
+  if (res.code !== 0) throw new TestlaneError("E_GIT", `git ls-tree failed for ${ref}: ${res.stderr.trim()}`);
+  const line = res.stdout.split("\0")[0] ?? "";
+  const m = line.match(/^(\d+) (\w+) ([0-9a-f]+)\t(.*)$/s);
+  if (!m || m[4] !== path) return null;
+  return { mode: m[1]!, type: m[2]!, id: m[3]! };
+}
+
+/** Largest repo file Testlane reads, in bytes (§5.7). */
+export const MAX_BLOB_BYTES = 1024 * 1024;
+
+/**
+ * Read a blob's raw bytes. A partial clone fetches it from origin on demand.
+ * Throws E_CONFIG for a blob over `MAX_BLOB_BYTES`, E_GIT on any git failure.
+ */
+export async function readBlob(repoPath: string, id: string, label: string): Promise<Buffer> {
+  const run = (argv: string[]) => captureBytes(argv, { env: env() });
+  const size = await run(["git", "-C", repoPath, "cat-file", "-s", id]);
+  if (size.code !== 0) throw new TestlaneError("E_GIT", `cannot read ${label}: ${size.stderr.trim()}`);
+  const bytes = Number(size.stdout.toString("utf8").trim());
+  if (!Number.isFinite(bytes) || bytes > MAX_BLOB_BYTES) {
+    throw new TestlaneError("E_CONFIG", `${label} is larger than ${MAX_BLOB_BYTES} bytes`);
+  }
+  const blob = await run(["git", "-C", repoPath, "cat-file", "blob", id]);
+  if (blob.code !== 0) throw new TestlaneError("E_GIT", `cannot read ${label}: ${blob.stderr.trim()}`);
+  return blob.stdout;
 }

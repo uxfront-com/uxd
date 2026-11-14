@@ -1,12 +1,13 @@
 // The tools `testlane mcp` offers (ADR-003). Each one calls its CLI verb's own
 // function in-process, with `--json` and `--yes` set, and returns what the verb
 // printed. No tool spawns the CLI, takes a raw argv or reaches `default_command`.
+// `--yes` never approves a repo's `.testlane.toml` here (`ctx.noTrustApproval`).
 
 import { existsSync } from "node:fs";
 import { z } from "zod";
 import { TestlaneError, configError, usage } from "../lib/errors.ts";
 import { Logger, type LogLevel, type Sink } from "../lib/log.ts";
-import { loadDefaults, loadProject } from "../config/load.ts";
+import { loadDefaults, loadEffectiveProject } from "../config/load.ts";
 import { parseRef, refFromDisambiguator, type RefSpec } from "../core/resolve.ts";
 import { RealGhClient, type GhClient } from "../git/gh.ts";
 import type { Ctx, GlobalFlags } from "../config/schema.ts";
@@ -176,7 +177,7 @@ const ADDITIVE = { readOnlyHint: false, destructiveHint: false };
 const DESTRUCTIVE = { readOnlyHint: false, destructiveHint: true };
 
 function project(env: CallEnv, args: Record<string, unknown>) {
-  return loadProject(env.ctx.configDir, args.project as string, env.ctx.defaults);
+  return loadEffectiveProject(env.ctx.configDir, args.project as string, env.ctx.defaults);
 }
 
 function refOf(args: Record<string, unknown>): RefSpec {
@@ -435,6 +436,8 @@ export async function runTool(tool: Tool, rawArgs: unknown, opts: CallOptions): 
       gh: opts.gh?.() ?? new RealGhClient(),
       signal: opts.signal,
       isolated: true,
+      // `yes` above answers `rm`'s question, never the trust gate's (§5.7).
+      noTrustApproval: true,
     };
     return await tool.run(parsed.data, { ctx, err });
   } catch (e) {

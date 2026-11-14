@@ -57,6 +57,53 @@ export const RawProjectSchema = z
   })
   .strict();
 
+// ── Repository file (`.testlane.toml`, §5.7) ────────────────────────────────
+
+/**
+ * Keys a repo's `.testlane.toml` may not set: they describe the user's machine,
+ * not the repo. Dotted paths name nested keys.
+ */
+export const USER_ONLY_KEYS = [
+  "repo",
+  "repo_path",
+  "worktrees_path",
+  "default_branch",
+  "editor",
+  "base_port",
+  "setup.seed_from",
+] as const;
+
+/** `<project>` is replaced with the project name when issues are reported. */
+export const USER_ONLY_MESSAGE = "user-only key; set it in <project>.toml";
+
+// Present ⇒ always an issue, with the user-only message instead of zod's
+// generic "Unrecognized key".
+const userOnly = z.custom<never>(() => false, { message: USER_ONLY_MESSAGE }).optional();
+
+export const RawRepoSetupSchema = RawSetupSchema.pick({ run: true, cache_key: true, seed_files: true })
+  .extend({ seed_from: userOnly })
+  .strict();
+
+export const RawRepoSchema = RawProjectSchema.pick({
+  default_command: true,
+  ports: true,
+  env: true,
+  commands: true,
+  hooks: true,
+})
+  .extend({
+    setup: RawRepoSetupSchema.optional(),
+    repo: userOnly,
+    repo_path: userOnly,
+    worktrees_path: userOnly,
+    default_branch: userOnly,
+    editor: userOnly,
+    base_port: userOnly,
+  })
+  .strict();
+
+export type RawRepo = z.infer<typeof RawRepoSchema>;
+
 export const RawDefaultsSchema = z
   .object({
     root: z.string().optional(),
@@ -125,6 +172,13 @@ export interface Ctx {
    * their own, and never on Testlane's stdout (`testlane mcp`, ADR-003).
    */
   isolated?: boolean;
+  /**
+   * Nobody here can approve a repo's `.testlane.toml`: the trust gate takes
+   * neither `--yes` nor a terminal as an answer, so an untrusted or changed
+   * file fails with E_CONFIG. A person approves it with `testlane config trust`
+   * (`testlane mcp`, §5.7).
+   */
+  noTrustApproval?: boolean;
 }
 
 /** The sink a verb prints its result to. */

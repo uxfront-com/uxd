@@ -9,7 +9,7 @@ import { dataDirFor, ensureWorkspace, resolveLast } from "../core/workspace.ts";
 import { disposeWorkspace } from "../core/remove.ts";
 import { wsContext } from "../core/env.ts";
 import { runHook } from "../core/hooks.ts";
-import { fetchBranch, fetchPrHead, type GitEnv } from "../git/repo.ts";
+import { fetchBranch, fetchBranchArgv, fetchPrHead, type GitEnv } from "../git/repo.ts";
 import {
   cleanUntracked,
   diffCount,
@@ -162,7 +162,9 @@ function dryRunSync(ctx: Ctx, project: ProjectConfig, ref: RefSpec, mode: Mode):
   const fetchArgv =
     ws.kind === "pr" && ws.number !== undefined
       ? ["git", "-C", ws.path, "fetch", "origin", `refs/pull/${ws.number}/head`, "--no-tags"]
-      : ["git", "-C", project.repoPath, "fetch", "--no-tags", "origin", "--end-of-options", ws.branch ?? "HEAD"];
+      : ws.branch
+        ? fetchBranchArgv(project.repoPath, ws.branch)
+        : ["git", "-C", project.repoPath, "fetch", "--no-tags", "origin", "--end-of-options", "HEAD"];
   const target = ws.kind === "pr" && ws.number !== undefined ? "FETCH_HEAD" : "@{u}";
 
   process.stdout.write(`${fetchArgv.join(" ")}\n`);

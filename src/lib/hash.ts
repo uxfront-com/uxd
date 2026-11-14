@@ -1,4 +1,6 @@
-// FNV-1a 32-bit — used for deterministic port/base_port derivation (§5.4, §8.5).
+// Hashes: FNV-1a 32-bit for ports (§5.4, §8.5), sha256 for repo-config approval (§5.7).
+
+import { createHash } from "node:crypto";
 
 const FNV_OFFSET_BASIS = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
@@ -13,4 +15,9 @@ export function fnv1a32(input: string): number {
     hash = Math.imul(hash, FNV_PRIME);
   }
   return hash >>> 0;
+}
+
+/** sha256 of raw bytes (or a UTF-8 string), as lowercase hex. */
+export function sha256Hex(input: Uint8Array | string): string {
+  return createHash("sha256").update(input).digest("hex");
 }

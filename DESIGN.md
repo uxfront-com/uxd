@@ -192,7 +192,7 @@ Ref disambiguators (workspace commands only): `--pr <n>`, `--branch <name>`, `--
 
 ### 5.1 Discovery
 
-Config directory resolution order: `--config-dir` flag → `TESTLANE_CONFIG_DIR` env → `~/.testlane` (default). Testlane 2.x also falls back to the 1.x variable and directory, with a warning (§5.6). If the directory does not exist, every command except `help`/`version`/`config path` fails with exit 3 and a hint to create it.
+Config directory resolution order: `--config-dir` flag → `TESTLANE_CONFIG_DIR` env → `~/.testlane` (default). Testlane 2.x also falls back to the 1.x variable and directory, with a warning (§5.6). If the directory does not exist, every command except `help`/`version`/`doctor`/`completions`/`setup`/`mcp`/bare `config`/`config path` and `config add <url>` fails with exit 3 and a hint to create it.
 
 ### 5.2 Layout
 
@@ -324,13 +324,51 @@ Testlane was called uxd until 2.0. For the 2.x line it still reads what uxd wrot
 - **No `uxd` binary.** The package ships only `testlane`, because a second bin named `uxd` would clash with an installed `@uxfront/uxd`.
 - **Exported twins don't warn.** Testlane can't see which process reads `$UXD_PORT`, so the aliases are silent. Layers 3–5 of §11.2 override either name.
 
+### 5.7 Repository config (`.testlane.toml`)
+
+A repo can commit a `.testlane.toml` at its root, so its maintainers write the setup, env and commands once and every user gets them. It holds the keys that describe the repo, never the user's machine.
+
+| Allowed | User-only (rejected in the repo file) |
+|---|---|
+| `ports`, `default_command`, `[setup]` `run`/`cache_key`/`seed_files`, `[env]`, `[commands.*]`, `[hooks]` | `repo`, `repo_path`, `worktrees_path`, `default_branch`, `editor`, `base_port`, `setup.seed_from` |
+
+Validation is aggregate, as in §5.4, and every issue names the file as `<project>:.testlane.toml`, for example `app:.testlane.toml: editor: user-only key; set it in app.toml`.
+
+**Where it is read.** Only from the tip of the default branch in the primary repo: the blob at `refs/remotes/origin/<default>:.testlane.toml`. Never from a worktree, and never from the ref being materialized, so a PR (same-repo or fork) cannot change what `setup`, `hooks` or `commands` run on the reviewer's machine. The default branch is the user's `default_branch`, else the bare clone's `HEAD` (origin's default at clone time), else `git ls-remote --symref origin HEAD`. Testlane adds no fetch for it: it reads the tracking ref the run's own fetches left, so an upstream change is seen by the first run that fetches the default branch (first clone, a checkout or `--fetch` of it, or `config trust`). The file must be a regular file of at most 1 MiB, in UTF-8.
+
+**Trust.** A repo file's commands run only after the user approves that exact content.
+
+- The approval is stored in project state as `repoConfig` (§8.2): the sha256 of the file's bytes, its git blob id, the content itself and `approvedAt`.
+- The config a run uses is always the user file plus the **last approved snapshot**. Unapproved content never reaches it.
+- The gate (§8.1) compares the tip's blob id with the stored one, so an unchanged file needs no blob read and no network. When they differ, it reads and validates the tip (a schema error fails the run with exit 3; it does not fall back), then shows what it would run: on first use, `setup.run`, each `commands.<name>.run` with its `cwd`, each hook, then the whole file; on a change, a unified diff from the approved content. Then it asks `Trust <project>:.testlane.toml? [y/N]` on stderr.
+- `--yes` approves without asking. With stdin not a TTY and no `--yes`, the run fails with `E_CONFIG`: `<project>:.testlane.toml is not trusted` (first use) or `<project>:.testlane.toml changed since you trusted it`, both with `hint: testlane config trust <project>`.
+- Declining on first use runs the user file on its own. Declining a change keeps the version approved before.
+- A stored approval that no longer matches its sha256 or no longer validates (a hand-edited state file, or a schema change) counts as none: commands that only read config use the user file alone, the gate asks again as on first use, and `config validate` and `doctor` report it.
+- Every value, file and diff the gate shows has its control characters (C0, C1, DEL) and bidi controls escaped, like `\r` or `\u001b`, so the file can't repaint or reorder the lines you approve from. The same goes for each issue the repo file's validation reports, TOML parse errors included, since they quote the file before anything is approved.
+- A file removed upstream drops the stored approval, with one `→` line.
+- Repo commands are known at parse time only once approved. Until then, `testlane app dev` reads `dev` as a ref, and `testlane app 12 dev` fails with `E_USAGE` (unknown command). Run `config add <url>` or `config trust <project>` first. `run`/`start` check the command again after the gate, and an approved change that drops it is `E_USAGE`.
+
+**Merge.** The user file wins.
+
+| Keys | Rule |
+|---|---|
+| Scalars (`ports`, `default_command`, `setup.run`) | The user value replaces the repo value. |
+| Arrays (`setup.cache_key`, `setup.seed_files`) | The user value replaces the repo value; never concatenated. |
+| `[env]` | Merged by key. |
+| `[commands]` | Merged by name; a user command replaces the whole repo command, `cwd` and `env` included. |
+| `[hooks]` | Merged per hook name. |
+
+Precedence for a key is: the user file, then the repo file, then `defaults.toml`, then the built-in default. Only `default_command` exists in both the repo file and `defaults.toml`, so a repo `default_command` beats the user's `defaults.toml` one. A project without a repo file behaves exactly as before.
+
+A user `default_command` may name a repo command. Until that file is approved, the project fails to load with `E_CONFIG` and `hint: testlane config trust <project>`. `config trust` leaves that check to the file it approves: it records the file only if the user file merged with it validates, and otherwise fails with `E_CONFIG` and every issue.
+
 ---
 
 ## 6. Ref resolution
 
 ### 6.1 Input → RefSpec
 
-Parsed in this order (first match wins). Disambiguator flags (`--pr`, `--branch`, `--path`) bypass parsing entirely.
+Parsed in this order (first match wins). Disambiguator flags (`--pr`, `--branch`, `--path`) bypass the table. `--branch` still refuses a name that row 6 would refuse with `E_RESOLVE`, so git can never read it as an option or a refspec.
 
 | # | Pattern | RefSpec | Example |
 |---|---|---|---|
@@ -339,7 +377,7 @@ Parsed in this order (first match wins). Disambiguator flags (`--pr`, `--branch`
 | 3 | `^#?\\d+$` | `{ kind: "pr", number }` | `19234`, `#19234` |
 | 4 | `^pr/(\\d+)$` (case-insensitive) | `{ kind: "pr", number }` | `pr/19234` |
 | 5 | `^[0-9a-f]{40}$` | `{ kind: "commit", sha }` (M2) | full SHA |
-| 6 | anything else valid per `git check-ref-format --branch` | `{ kind: "branch", name }` | `ai/fix-canvas-drag` |
+| 6 | anything else valid per `git check-ref-format --branch`, not starting with `-` or `+`, and not `head` in any case | `{ kind: "branch", name }` | `ai/fix-canvas-drag` |
 | 7 | otherwise | exit 4, `E_RESOLVE` with the failed pattern | — |
 
 Notes: short SHAs are deliberately *not* auto-detected (ambiguous with hex-ish branch names) — commit refs require the full 40 chars or a future `--commit` flag. URL-form refs are extracted during classification (§4.3) and produce `pr` or `branch` RefSpecs.
@@ -396,9 +434,11 @@ Default branch detection: `git ls-remote --symref origin HEAD` → cache in stat
 Branch ref:
 
 ```bash
-git -C <repo_path> fetch origin <name> --no-tags
+git -C <repo_path> fetch --no-tags origin --end-of-options +refs/heads/<name>:refs/remotes/origin/<name>
 git -C <repo_path> worktree add <worktrees_path>/<slug> -B <name> --track origin/<name>
 ```
+
+On a filesystem that ignores case (git sets `core.ignorecase` there), `refs/remotes/origin/Main` is the same file as `refs/remotes/origin/main`. So a name that differs from an existing `origin/*` ref only in case or Unicode normalization is refused with `E_RESOLVE` before the fetch.
 
 If the branch is already checked out in another Testlane worktree, git refuses; catch that error and re-point the user at the existing workspace path (this is the dedupe path — normally the slug lookup in state short-circuits earlier).
 
@@ -464,15 +504,21 @@ ensureWorkspace(project, refSpec, opts { setup: boolean }):
   3. state = loadState(project)
   4. if state.workspaces[slug] exists and its path exists on disk:
        ws = it                                     # fast path — no network
+       (--fetch) re-fetch
+       trust gate (§5.7)                           # on every call, with or without --fetch
      else:
        ensure primary repo initialized (§7.1)
-       fetch + worktree add (§7.2, §7.3)
+       fetch the ref (§7.2)
+       trust gate (§5.7)                           # before anything is created
+       worktree add (§7.2, §7.3)
        allocate port block (§8.5); create data dir
        ws = new entry; run post_checkout hook
   5. if opts.setup: runSetup(ws)                    # §8.4 — seeds + install, cached
   6. ws.lastUsedAt = now; state.lastRef = original ref string; save state
   7. unlock; return ws
 ```
+
+The trust gate runs under the lock, after the run's fetch and before any worktree add, `post_checkout` or setup. It settles the project's config in place and writes an approval into the state held by this pipeline, saving it at once, so every hook, setup and command after it uses the approved snapshot, and a refused gate leaves no new workspace behind. It is skipped for an adopted path when the primary repo isn't initialized, and in `--dry-run`.
 
 `checkout`/`code`/`diff`/`info` call it with `setup: false`; `run`/`exec`/`shell` with `setup: true` (`--no-setup` overrides; `--setup` forces it for checkout/code). A `--fetch` flag on any workspace verb forces step 4's fetch even on the fast path (i.e. an inline sync, minus reset).
 
@@ -504,6 +550,19 @@ ensureWorkspace(project, refSpec, opts { setup: boolean }):
   }
 }
 ```
+
+`repoConfig` (optional) holds the approved `.testlane.toml` snapshot (§5.7):
+
+```jsonc
+"repoConfig": {
+  "sha256": "9f2c…",                       // of the file's bytes
+  "blob": "3b18e512dba79e4c8300dd08aeb37f8e728b8dad",  // git blob id at approval
+  "content": "[commands.dev]\nrun = \"pnpm dev\"\n",
+  "approvedAt": "2026-11-13T10:40:00Z"
+}
+```
+
+It needs no version bump: older 2.x releases keep the field when they rewrite the file. Commands that read only config (`projects`, `config show`, `config validate`, URL routing, parse-time command lookup) read this field leniently: a missing, corrupt or newer-version state file means "no snapshot".
 
 Unknown `version` → exit 3 with an upgrade hint. Entries whose `path` no longer exists are reported by `list` as `missing` and swept by `clean --prune-state`.
 
@@ -639,10 +698,26 @@ Runs the checks below; each prints `ok` / `warn` / `fail` + one-line detail to s
 | orphaned worktrees (`git worktree list` entries missing from state, tracked entries git no longer knows, and tracked entries whose directory is gone from disk — git does not auto-prune, so the disk check is what catches a hand-`rm -rf`) | warn, hint `clean --prune-state` |
 | configured command name shadows a built-in verb | warn |
 | repo `core.hooksPath` set to a path outside the repo / husky installed | warn (hooks may misbehave in worktrees) |
+| `project <name>: repo file` (§5.7), comparing blob ids only, so offline | ok: no file, trusted, or not cloned yet; warn: untrusted, changed since approval, or removed upstream with an approval stored; fail: the stored approval no longer matches its sha256 or no longer validates |
 
 ### 9.12 `config`
 
-`config path` → print config dir (stdout). `config edit [project]` (alias `config add [project]`) → open `<project>.toml` (or the dir) in `$EDITOR`/project editor. `config validate [project]` → run schema validation for one/all projects, report per §5.4, exit 3 on any error.
+`config path` → print config dir (stdout). `config edit [project]` (alias `config add [project]`) → open `<project>.toml` (or the dir) in `$EDITOR`/project editor. `config validate [project]` → run schema validation for one/all projects, including each approved repo-config snapshot (§5.7), report per §5.4, exit 3 on any error.
+
+`config add <url> [--name <name>] [--root <dir>]` adds a project from its repo. The argument is any URL `testlane` routes (§4.3): ssh, https, or a `/pull/<n>` or `/tree/<branch>` web URL.
+
+- The project name is the repo name, and `--name` overrides it. An invalid name is `E_USAGE`.
+- It writes `<name>.toml` with one line, `repo = "<clone url>"`: an ssh URL verbatim, or `https://<host>/<owner>/<repo>.git` with the original case.
+- It needs `defaults.root`. On a new machine, `--root <dir>` creates the config dir and writes `root` to `defaults.toml`, as `setup` does, so `config add <url>` is exempt from the config-dir guard (§5.1). Without either, it fails with `E_CONFIG` and `hint: pass --root <dir>, for example --root ~/dev/testlane`. A `--root` that differs from an existing `defaults.root` is `E_USAGE`.
+- An existing `<name>.toml` or `repo_path` is `E_CONFIG`. Every check runs before anything is written.
+- It then clones the primary repo (§7.1). A failed clone puts back what the run wrote (the project file, and the config dir, `root` line and root directory it created) and exits 5.
+- A state file left by an earlier project of the same name loses its approval, saved before the trust prompt, so it never vouches for this repo, even when the run then stops at the prompt.
+- With a `.testlane.toml` on the default branch, it shows it and asks for trust (§5.7). Off a TTY without `--yes`, the project stays and the run exits 3 with `hint: testlane config trust <name>`. Without a repo file, it writes the §9.12 template with the real `repo` line and opens the editor, as `config add <name>` does.
+- `--dry-run` prints the files it would write and the clone commands, and touches nothing.
+
+`config trust <project>` → under the lock, clone the primary repo if needed, fetch the default branch, then show the repo file (first use) or the diff from the approved one, ask, and record the approval. When there is nothing to approve, it reports "already trusted" or "no .testlane.toml on origin/<default>" as a `→` step line (silenced by `--quiet`) and exits 0. A stored approval that no longer matches its sha256 or no longer validates counts as none, so `config trust` shows the file and asks again as on first use. Off a TTY without `--yes`, it exits 3 with `hint: re-run on a terminal, or pass --yes`. It loads the user file alone, so a broken snapshot never stops it.
+
+`config show <project>` → the merged config, offline, one `key = value  # source` line per key, where the source is `user`, `repo` or `default` (`defaults.toml` and built-in defaults). `--json` prints one object: `{ project, approved: { sha256, approvedAt } | null, config, sources }`, where `config` uses TOML key names and `sources` maps a dotted key (`commands.dev`, `env.PORT`, `setup.run`) to its source.
 
 ### 9.13 `completions <bash|zsh|fish>` (M2)
 
@@ -814,12 +889,14 @@ testlane/
     config/
       schema.ts           # zod schemas + inferred types (Config, ProjectConfig, …)
       load.ts             # discovery (§5.1), TOML parse, defaults merge, aggregate errors
+      repo.ts             # .testlane.toml parse/validate and the user-over-repo merge (§5.7)
     core/
       resolve.ts          # ref → RefSpec (§6.1), slug(), URL extraction
       workspace.ts        # ensureWorkspace pipeline (§8.1)
       setup.ts            # seeding, cache-key hashing, install (§8.4)
       ports.ts            # allocation (§8.5)
       state.ts            # load/save (atomic), lock/unlock (§7.6)
+      trust.ts            # the repo-config trust gate (§5.7)
       supervise.ts        # process.json, liveness, stop, readiness (§9.14–9.17)
     git/
       repo.ts             # init, fetch strategies, default-branch detect (§7.1–7.3)

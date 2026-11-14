@@ -19,6 +19,7 @@ import { ExitCode, configError, usage } from "../lib/errors.ts";
 import { parseFlags } from "../cli/flags.ts";
 import { promptLine } from "../lib/prompt.ts";
 import { isValidProjectName, loadDefaults, loadProject, projectFilePath } from "../config/load.ts";
+import { tomlString } from "../lib/project-template.ts";
 import type { Ctx } from "../config/schema.ts";
 import type { TopInput } from "./types.ts";
 
@@ -126,18 +127,13 @@ function required(value: string | undefined, flag: string, what: string): string
 }
 
 /** Append `root = …` to defaults.toml (creating it). Safe: defaults has no tables. */
-function appendDefaultsRoot(file: string, root: string): void {
+export function appendDefaultsRoot(file: string, root: string): void {
   const existing = existsSync(file) ? readFileSync(file, "utf8") : "";
   const base = existing && !existing.endsWith("\n") ? existing + "\n" : existing;
   writeFileSync(file, `${base}root = ${tomlString(root)}\n`);
 }
 
-/** Minimal TOML basic-string encoder for the values we write (paths, URLs, refs). */
-function tomlString(value: string): string {
-  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-}
-
-function indent(block: string): string {
+export function indent(block: string): string {
   return block
     .split("\n")
     .map((l) => (l ? `  ${l}` : l))

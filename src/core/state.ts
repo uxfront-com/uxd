@@ -30,11 +30,23 @@ export interface Workspace {
   };
 }
 
+/** The approved snapshot of a repo's `.testlane.toml` (§5.7). */
+export interface RepoApproval {
+  /** sha256 of the file's bytes, hex. */
+  sha256: string;
+  /** git blob id of the file at approval, so an unchanged tip needs no blob read. */
+  blob: string;
+  /** The approved file, so the config loads and diffs without git. */
+  content: string;
+  approvedAt: string;
+}
+
 export interface State {
   version: number;
   defaultBranch?: string;
   lastRef?: string;
   workspaces: Record<string, Workspace>;
+  repoConfig?: RepoApproval;
 }
 
 function statePath(project: string): string {
@@ -70,6 +82,24 @@ export function loadState(project: string): State {
   }
   if (!parsed.workspaces) parsed.workspaces = {};
   return parsed;
+}
+
+/**
+ * The approved repo-config snapshot, or undefined. Never throws: a missing,
+ * corrupt or newer-version state file means "no snapshot", so commands that
+ * read nothing else from state keep working on a bad file (§5.7).
+ */
+export function readRepoApproval(project: string): RepoApproval | undefined {
+  try {
+    const parsed = JSON.parse(readFileSync(statePath(project), "utf8")) as Partial<State> | null;
+    if (!parsed || parsed.version !== STATE_VERSION) return undefined;
+    const rc = parsed.repoConfig;
+    if (!rc || typeof rc !== "object") return undefined;
+    if (typeof rc.content !== "string" || typeof rc.sha256 !== "string" || typeof rc.blob !== "string") return undefined;
+    return rc;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Atomically persist state (temp file + rename, §8.2, §19.9). */

@@ -106,6 +106,8 @@ export async function start(input: WorkspaceInput): Promise<number> {
     if (current) removeEntry(dataDir, current.pid);
 
     const { ws } = await ensureWorkspace(ctx, project, spec, ensureOpts);
+    // The trust gate may have approved a repo file that drops this command.
+    commandName(project, name, "start");
     const cmd = buildCommand(project, ws, dataDir, name, input.passthrough, flagEnv);
     const port = ws.ports[0]!;
 

@@ -31,6 +31,8 @@ export async function run(input: WorkspaceInput): Promise<number> {
     reseed: flags.bool("--reseed"),
     preRun: true,
   });
+  // The trust gate may have approved a repo file that drops this command.
+  commandName(project, name, "run");
 
   const cmd = buildCommand(project, ws, dataDir, name, input.passthrough, flagEnv, flags.value("--port"));
 

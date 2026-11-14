@@ -39,6 +39,8 @@ export interface FixtureOrigin {
   forcePush(branch: string, files: Record<string, string>): string;
   /** Merge `from` into `into` in the origin (via the work clone). Returns the new sha. */
   merge(into: string, from: string): string;
+  /** Delete `paths` on `branch`, commit, push. Returns the new sha. */
+  remove(branch: string, paths: string[]): string;
 }
 
 /** Build a bare origin repo plus a private work clone used to author commits. */
@@ -77,6 +79,13 @@ export function makeFixtureOrigin(tmp: string): FixtureOrigin {
       git(["-C", workPath, "checkout", into]);
       git(["-C", workPath, "merge", "--no-ff", "-m", `Merge ${from} into ${into}`, from]);
       git(["-C", workPath, "push", "origin", into]);
+      return git(["-C", workPath, "rev-parse", "HEAD"]).trim();
+    },
+    remove: (branch, paths) => {
+      git(["-C", workPath, "checkout", branch]);
+      git(["-C", workPath, "rm", "-q", "--", ...paths]);
+      git(["-C", workPath, "commit", "-m", `remove on ${branch}`]);
+      git(["-C", workPath, "push", "origin", branch]);
       return git(["-C", workPath, "rev-parse", "HEAD"]).trim();
     },
   };

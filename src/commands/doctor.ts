@@ -6,8 +6,17 @@ import { ExitCode } from "../lib/errors.ts";
 import { stateDir } from "../lib/paths.ts";
 import { checkGitVersion, fetchRefspecConfigured, hooksPathConfigured, isBareRepo, isInitialized, MIN_GIT_VERSION } from "../git/repo.ts";
 import { listWorktrees } from "../git/worktree.ts";
-import { listProjectNames, loadDefaults, loadProject, ConfigValidationError } from "../config/load.ts";
-import { loadState } from "../core/state.ts";
+import {
+  listProjectNames,
+  loadDefaults,
+  loadEffectiveProjectWithSources,
+  loadProject,
+  ConfigValidationError,
+} from "../config/load.ts";
+import { REPO_FILE } from "../config/repo.ts";
+import type { ProjectConfig } from "../config/schema.ts";
+import { loadState, readRepoApproval } from "../core/state.ts";
+import { readRepoTip, repoConfigBranch } from "../core/trust.ts";
 import { presetBinary, isPreset } from "../core/editor.ts";
 import { isWorkspaceVerb } from "../cli/verbs.ts";
 import { which } from "../lib/which.ts";
@@ -135,15 +144,26 @@ async function checkProject(
   defaults: ReturnType<typeof loadDefaults>,
   checks: Check[],
 ): Promise<void> {
-  let project;
+  let project: ProjectConfig;
   try {
     project = loadProject(configDir, name, defaults);
   } catch (e) {
-    const detail = e instanceof ConfigValidationError ? e.issues.map((i) => i.message).join("; ") : String(e);
-    checks.push({ name: `project ${name}: config`, status: "fail", detail });
+    checks.push({ name: `project ${name}: config`, status: "fail", detail: issueDetail(e) });
     return;
   }
   checks.push({ name: `project ${name}: config`, status: "ok", detail: "schema-valid" });
+
+  // The approved repo-config snapshot merged in (§5.7); its failure belongs to
+  // the repo-file check below, since the user file itself is fine.
+  let snapshotError: unknown;
+  try {
+    const loaded = loadEffectiveProjectWithSources(configDir, name, defaults);
+    project = loaded.project;
+    snapshotError = loaded.snapshotError;
+  } catch (e) {
+    snapshotError = e;
+  }
+  checks.push(await repoFileCheck(name, project, snapshotError));
 
   // repo_path parent writable / repo healthy
   if (isInitialized(project.repoPath)) {
@@ -214,6 +234,43 @@ async function checkProject(
     loadState(name);
   } catch (e) {
     checks.push({ name: `project ${name}: state`, status: "fail", detail: String((e as Error).message) });
+  }
+}
+
+function issueDetail(e: unknown): string {
+  return e instanceof ConfigValidationError ? e.issues.map((i) => i.message).join("; ") : String((e as Error)?.message ?? e);
+}
+
+/**
+ * Is there a `.testlane.toml` on origin/<default>, and is it trusted (§9.11)?
+ * Compares git blob ids only, so it needs no network.
+ */
+async function repoFileCheck(name: string, project: ProjectConfig, snapshotError: unknown): Promise<Check> {
+  const check = (status: Status, detail: string): Check => ({ name: `project ${name}: repo file`, status, detail });
+  if (snapshotError !== undefined) {
+    return check("fail", `the stored approval is unusable (${issueDetail(snapshotError)}) — run \`testlane config trust ${name}\``);
+  }
+  if (!isInitialized(project.repoPath)) return check("ok", "not cloned yet");
+  const approval = readRepoApproval(name);
+  const branch = await repoConfigBranch(project);
+  let tip;
+  try {
+    tip = branch ? await readRepoTip(project.repoPath, branch, name) : { kind: "no-ref" as const };
+  } catch (e) {
+    return check("warn", issueDetail(e));
+  }
+  const trustHint = `run \`testlane config trust ${name}\``;
+  switch (tip.kind) {
+    case "no-ref":
+      return check("ok", `origin/${branch ?? "<default>"} not fetched yet`);
+    case "no-file":
+      return approval
+        ? check("warn", `removed upstream from origin/${branch}, but an approval is stored; the next run drops it`)
+        : check("ok", `no ${REPO_FILE} on origin/${branch}`);
+    case "file":
+      if (!approval) return check("warn", `untrusted ${REPO_FILE} on origin/${branch} — ${trustHint}`);
+      if (approval.blob !== tip.blob) return check("warn", `${REPO_FILE} on origin/${branch} changed since approval — ${trustHint}`);
+      return check("ok", `trusted (sha256 ${approval.sha256.slice(0, 12)}, approved ${approval.approvedAt})`);
   }
 }
 

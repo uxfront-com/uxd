@@ -4,13 +4,13 @@
  * Build the seed TOML for a new project file. Only `repo` is uncommented;
  * every other field is a commented example, so the file is valid as-is (once
  * `defaults.root` is set) and becomes real after a single edit — swapping the
- * placeholder repo URL. Path fields are intentionally omitted from the active
+ * placeholder repo URL. `config add <url>` passes the real `repo` instead. Path fields are intentionally omitted from the active
  * body: they default to `{root}/<project>/{repo,trees}` (§5.4).
  */
-export function defaultProjectTemplate(project: string): string {
+export function defaultProjectTemplate(project: string, repo?: string): string {
   return [
     `# testlane project config for "${project}" — check with \`testlane config validate ${project}\``,
-    `repo = "git@github.com:ORG/REPO.git"   # required`,
+    `repo = ${repo === undefined ? `"git@github.com:ORG/REPO.git"` : tomlString(repo)}   # required`,
     ``,
     `# editor = "code"            # optional; $VISUAL/$EDITOR wins when unset`,
     `# default_command = "code"   # optional; default action for \`testlane ${project} <ref>\``,
@@ -28,4 +28,9 @@ export function defaultProjectTemplate(project: string): string {
     `# run = "pnpm dev"`,
     ``,
   ].join("\n");
+}
+
+/** Minimal TOML basic-string encoder for the values Testlane writes (paths, URLs, refs). */
+export function tomlString(value: string): string {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }

@@ -621,3 +621,202 @@ describe("round trip", () => {
     expect(await c.close()).toBe(0);
   });
 });
+
+// ── A repo's .testlane.toml (§5.7): no tool call can approve it ─────────────
+
+describe("a repo's .testlane.toml", () => {
+  const REPO_FILE = [`[hooks]`, `post_checkout = "echo repo > {data_dir}/hook.txt"`, ``].join("\n");
+
+  function repoState(env: Harness): { repoConfig?: { sha256: string; content: string } } | null {
+    const file = join(env.stateHome, "testlane", "app.json");
+    return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+  }
+  const hookFile = (env: Harness, slug: string) => join(env.worktreesPath("app"), ".data", slug, "hook.txt");
+
+  /** The refusal the CLI gives off a terminal, as the tool's error envelope. */
+  function expectRefused(r: { isError: boolean; value: any }, message: string): void {
+    expect(r.isError, JSON.stringify(r.value)).toBe(true);
+    expect(r.value.error).toMatchObject({ errCode: "E_CONFIG", exitCode: 3, message, hint: "testlane config trust app" });
+  }
+
+  it("checkout of an untrusted file fails, records no trust, creates nothing and runs no hook", async () => {
+    origin.commit("main", { ".testlane.toml": REPO_FILE });
+    const env = makeMcpEnv({ app: "" });
+    const c = connect(env);
+    await c.initialize();
+
+    expectRefused(await c.call("checkout", { project: "app", ref: "feature-x" }), "app:.testlane.toml is not trusted");
+    expect(repoState(env)?.repoConfig).toBeUndefined();
+    expect(existsSync(join(env.worktreesPath("app"), "feature-x"))).toBe(false);
+    expect(existsSync(hookFile(env, "feature-x"))).toBe(false);
+    expectOnlyProtocol(c);
+    expect(await c.close()).toBe(0);
+  });
+
+  it("start of an untrusted file fails, records no trust, creates nothing and runs nothing", async () => {
+    origin.commit("main", { ".testlane.toml": REPO_FILE });
+    const env = makeMcpEnv({ app: "" });
+    const c = connect(env);
+    await c.initialize();
+
+    const st = await c.call("start", { project: "app", ref: "feature-x", command: "web", timeout: 20 });
+    expectRefused(st, "app:.testlane.toml is not trusted");
+    expect(repoState(env)?.repoConfig).toBeUndefined();
+    expect(existsSync(join(env.worktreesPath("app"), "feature-x"))).toBe(false);
+    expect(existsSync(hookFile(env, "feature-x"))).toBe(false);
+    expect((await c.call("ps", { project: "app" })).value).toEqual([]);
+    expect(await c.close()).toBe(0);
+  });
+
+  it("after `testlane --yes config trust`, checkout succeeds and runs the repo hook", async () => {
+    origin.commit("main", { ".testlane.toml": REPO_FILE });
+    const env = makeMcpEnv({ app: "" });
+    const c = connect(env);
+    await c.initialize();
+    expectRefused(await c.call("checkout", { project: "app", ref: "feature-x" }), "app:.testlane.toml is not trusted");
+
+    // A person approves it on the CLI; the server needs no restart.
+    const trust = await env.run(["--yes", "config", "trust", "app"]);
+    expect(trust.code, trust.stderr).toBe(0);
+    const approved = repoState(env)!.repoConfig!;
+    expect(approved.content).toBe(REPO_FILE);
+
+    const co = await c.call("checkout", { project: "app", ref: "feature-x" });
+    expect(co.isError, JSON.stringify(co.value)).toBe(false);
+    expect(co.value.created).toBe(true);
+    expect(readFileSync(hookFile(env, "feature-x"), "utf8").trim()).toBe("repo");
+    expect(repoState(env)!.repoConfig).toEqual(approved);
+    expect(await c.close()).toBe(0);
+  });
+
+  it("a file changed since it was trusted fails and keeps the approval", async () => {
+    origin.commit("main", { ".testlane.toml": REPO_FILE });
+    const env = makeMcpEnv({ app: "" });
+    expect((await env.run(["--yes", "config", "trust", "app"])).code).toBe(0);
+    const approved = repoState(env)!.repoConfig!;
+    const c = connect(env);
+    await c.initialize();
+    expect((await c.call("checkout", { project: "app", ref: "main" })).isError).toBe(false);
+
+    origin.commit("main", { ".testlane.toml": REPO_FILE.replace("echo repo", "echo changed") });
+    const again = await c.call("checkout", { project: "app", ref: "main", fetch: true });
+    expectRefused(again, "app:.testlane.toml changed since you trusted it");
+    expect(repoState(env)!.repoConfig).toEqual(approved);
+    expect(await c.close()).toBe(0);
+  });
+});
+
+describe("a repo's .testlane.toml, over MCP: effective config and branch names", () => {
+  function repoState(env: Harness): { repoConfig?: { sha256: string; content: string } } | null {
+    const file = join(env.stateHome, "testlane", "app.json");
+    return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : null;
+  }
+  const originMain = (env: Harness) =>
+    spawnSync("git", ["-C", env.repoPath("app"), "rev-parse", "refs/remotes/origin/main"], { encoding: "utf8" }).stdout.trim();
+
+  it("C11 — a crafted branch ref is refused and leaves origin/main where it was", async () => {
+    origin.commit("main", { ".testlane.toml": `[hooks]\npost_checkout = "echo main > {data_dir}/hook.txt"\n` });
+    origin.commit("evil", { ".testlane.toml": `[hooks]\npost_checkout = "echo pwned > {data_dir}/../PWNED.txt"\n` });
+    origin.makePr(7, "evil");
+    const env = makeMcpEnv({ app: "" });
+    expect((await env.run(["--yes", "config", "trust", "app"])).code).toBe(0);
+    const before = originMain(env);
+    expect(before).toMatch(/^[0-9a-f]{40}$/);
+
+    const c = connect(env);
+    await c.initialize();
+    const r = await c.call("checkout", { project: "app", ref: "+refs/pull/7/head:refs/remotes/origin/main", kind: "branch" });
+    expect(r.isError, JSON.stringify(r.value)).toBe(true);
+    expect(r.value.error).toMatchObject({ errCode: "E_RESOLVE", exitCode: 4 });
+    expect(originMain(env)).toBe(before);
+
+    // A later scripted run still reads main's file, not PR 7's.
+    expect((await env.run(["--yes", "app", "feature-x", "checkout"])).code).toBe(0);
+    expect(existsSync(join(env.worktreesPath("app"), ".data", "PWNED.txt"))).toBe(false);
+    expect(await c.close()).toBe(0);
+  });
+
+  it("C12 — a repo-only command starts after `config trust`", async () => {
+    origin.commit("main", { ".testlane.toml": `[commands.srv]\nrun = ${JSON.stringify(SERVER)}\n` });
+    const env = makeMcpEnv({ app: "" });
+    expect((await env.run(["--yes", "config", "trust", "app"])).code).toBe(0);
+
+    const c = connect(env);
+    await c.initialize();
+    const st = await c.call("start", { project: "app", ref: "main", command: "srv", timeout: 20 });
+    expect(st.isError, JSON.stringify(st.value)).toBe(false);
+    expect(await httpGet(st.value.port)).toBe("ok");
+    expect((await c.call("stop", { project: "app", ref: "main" })).isError).toBe(false);
+    expect(await c.close()).toBe(0);
+  });
+
+  it("C12 — rm runs the approved repo pre_clean", async () => {
+    const marker = join(tmp, "pre-clean-ran.txt");
+    origin.commit("main", { ".testlane.toml": `[hooks]\npre_clean = ${JSON.stringify(`echo {slug} > '${marker}'`)}\n` });
+    const env = makeMcpEnv({ app: "" });
+    expect((await env.run(["--yes", "config", "trust", "app"])).code).toBe(0);
+    expect(repoState(env)?.repoConfig).toBeDefined();
+
+    const c = connect(env);
+    await c.initialize();
+    const co = await c.call("checkout", { project: "app", ref: "feature-x" });
+    expect(co.isError, JSON.stringify(co.value)).toBe(false);
+    const gone = await c.call("rm", { project: "app", ref: "feature-x" });
+    expect(gone.isError, JSON.stringify(gone.value)).toBe(false);
+    expect(existsSync(co.value.path)).toBe(false);
+    expect(readFileSync(marker, "utf8").trim()).toBe("feature-x");
+    expect(await c.close()).toBe(0);
+  });
+});
+
+describe("a crafted branch ref named HEAD, over MCP", () => {
+  it("C11 — checkout of HEAD is refused and leaves origin/main where it was", async () => {
+    origin.commit("main", { ".testlane.toml": `[hooks]\npost_checkout = "echo main > {data_dir}/hook.txt"\n` });
+    const evil = origin.commit("evil", { ".testlane.toml": `[hooks]\npost_checkout = "echo pwned > {data_dir}/../PWNED.txt"\n` });
+    const env = makeMcpEnv({ app: "" });
+    expect((await env.run(["--yes", "config", "trust", "app"])).code).toBe(0);
+    spawnSync("git", ["-C", origin.path, "update-ref", "refs/heads/HEAD", evil]);
+    const originMain = () =>
+      spawnSync("git", ["-C", env.repoPath("app"), "rev-parse", "refs/remotes/origin/main"], { encoding: "utf8" }).stdout.trim();
+    const before = originMain();
+
+    const c = connect(env);
+    await c.initialize();
+    for (const args of [{ ref: "HEAD", kind: "branch" }, { ref: "HEAD" }]) {
+      const r = await c.call("checkout", { project: "app", ...args });
+      expect(r.isError, JSON.stringify(r.value)).toBe(true);
+      expect(r.value.error).toMatchObject({ errCode: "E_RESOLVE", exitCode: 4 });
+      expect(originMain()).toBe(before);
+    }
+    expect(await c.close()).toBe(0);
+  });
+});
+
+describe("a crafted branch ref that differs from origin/main only in case, over MCP", () => {
+  it("C11 — checkout of Main or head leaves origin/main where it was", async () => {
+    origin.commit("main", { ".testlane.toml": `[hooks]\npost_checkout = "echo main > {data_dir}/hook.txt"\n` });
+    const evil = origin.commit("evil", { ".testlane.toml": `[hooks]\npost_checkout = "echo pwned > {data_dir}/../PWNED.txt"\n` });
+    const env = makeMcpEnv({ app: "" });
+    expect((await env.run(["--yes", "config", "trust", "app"])).code).toBe(0);
+    // A case-sensitive origin even on a case-insensitive disk (see repo-config.test.ts).
+    spawnSync("git", ["-C", origin.path, "refs", "migrate", "--ref-format=reftable"]);
+    for (const name of ["Main", "head"]) {
+      expect(spawnSync("git", ["-C", origin.path, "update-ref", `refs/heads/${name}`, evil]).status).toBe(0);
+    }
+    const git = (...args: string[]) => spawnSync("git", ["-C", env.repoPath("app"), ...args], { encoding: "utf8" }).stdout.trim();
+    const before = git("rev-parse", "refs/remotes/origin/main");
+    const ignoresCase = git("config", "--bool", "core.ignorecase") === "true";
+
+    const c = connect(env);
+    await c.initialize();
+    for (const args of [{ ref: "Main", kind: "branch" }, { ref: "Main" }, { ref: "head", kind: "branch" }, { ref: "head" }]) {
+      const r = await c.call("checkout", { project: "app", ...args });
+      expect(git("rev-parse", "refs/remotes/origin/main"), JSON.stringify(args)).toBe(before);
+      if (args.ref === "head" || ignoresCase) {
+        expect(r.isError, JSON.stringify(r.value)).toBe(true);
+        expect(r.value.error).toMatchObject({ errCode: "E_RESOLVE", exitCode: 4 });
+      }
+    }
+    expect(await c.close()).toBe(0);
+  });
+});

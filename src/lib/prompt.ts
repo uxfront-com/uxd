@@ -5,8 +5,8 @@
 
 import { readSync } from "node:fs";
 
-export function promptLine(message: string): string | null {
-  process.stdout.write(`${message} `);
+export function promptLine(message: string, out: NodeJS.WritableStream = process.stdout): string | null {
+  out.write(`${message} `);
 
   const buf = Buffer.alloc(256);
   let input = "";

@@ -64,7 +64,7 @@ TOP-LEVEL VERBS
   setup               create the config dir and scaffold your first project
   projects            list configured projects
   doctor              diagnose environment & configs
-  config              path | edit [project] | add [project] | validate [project]
+  config              path | edit [project] | add [project|url] | validate [project] | show <project> | trust <project>
   completions         shell completions (M2)
   mcp                 serve Testlane's tools to an MCP client over stdio
   help                this text

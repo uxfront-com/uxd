@@ -3,7 +3,7 @@
 import { existsSync } from "node:fs";
 import { ExitCode } from "../lib/errors.ts";
 import { pad } from "../lib/table.ts";
-import { listProjectNames, loadDefaults, loadProject } from "../config/load.ts";
+import { listProjectNames, loadDefaults, loadEffectiveProject } from "../config/load.ts";
 import { loadState } from "../core/state.ts";
 import { stdoutOf } from "../config/schema.ts";
 import type { TopInput } from "./types.ts";
@@ -17,7 +17,7 @@ export async function projects(input: TopInput): Promise<number> {
     let repo = "?";
     let repoExists = false;
     try {
-      const p = loadProject(ctx.configDir, name, defaults);
+      const p = loadEffectiveProject(ctx.configDir, name, defaults);
       repo = p.repo;
       repoExists = existsSync(p.repoPath);
     } catch {
